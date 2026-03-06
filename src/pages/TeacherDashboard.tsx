@@ -47,7 +47,7 @@ import {
   Line,
   Legend
 } from 'recharts';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx/xlsx.mjs';
 
 import { supabaseService } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
