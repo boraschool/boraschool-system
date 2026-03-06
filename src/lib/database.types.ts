@@ -16,14 +16,16 @@ export interface Database {
           name: string
           email: string
           avatar_url: string | null
+          school_id: string | null
           created_at: string
         }
         Insert: {
-          id: string
+          id?: string
           role?: string
           name: string
           email: string
           avatar_url?: string | null
+          school_id?: string | null
           created_at?: string
         }
         Update: {
@@ -32,6 +34,39 @@ export interface Database {
           name?: string
           email?: string
           avatar_url?: string | null
+          school_id?: string | null
+          created_at?: string
+        }
+      }
+      schools: {
+        Row: {
+          id: string
+          name: string
+          location: string | null
+          type: string | null
+          principal_name: string | null
+          principal_email: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          location?: string | null
+          type?: string | null
+          principal_name?: string | null
+          principal_email?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          location?: string | null
+          type?: string | null
+          principal_name?: string | null
+          principal_email?: string | null
+          status?: string
           created_at?: string
         }
       }

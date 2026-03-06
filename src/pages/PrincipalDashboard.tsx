@@ -1048,33 +1048,46 @@ export const PrincipalDashboard = () => {
         name: newStaff.name,
         email: finalEmail,
         role: newStaff.role.toLowerCase()
-      }).eq('id', editingStaff.id).then();
+      }).eq('id', editingStaff.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating profile in Supabase:', error);
+          alert('Failed to update profile in Supabase. Local state updated.');
+        }
+      });
 
       setEditingStaff(null);
     } else {
       const password = Math.random().toString(36).slice(-8);
 
-      const staffMember = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newStaff,
-        email: finalEmail,
-        status: 'Active',
-        username: finalEmail,
-        password,
-        mustChangePassword: true,
-        school_id: school.id
-      };
-      setStaff([...staff, staffMember]);
-      
-      // Sync with Supabase (Note: This doesn't create an Auth user, just a profile record)
+      // Sync with Supabase first to get the generated ID
       supabase.from('profiles').insert({
         name: newStaff.name,
         email: finalEmail,
         role: newStaff.role.toLowerCase(),
         school_id: school.id
-      }).then();
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating profile in Supabase:', error);
+          alert('Database error saving new user: ' + error.message);
+          return;
+        }
 
-      setGeneratedStaffCreds({ name: newStaff.name, username: finalEmail, password });
+        if (data) {
+          const staffMember = {
+            id: data.id,
+            ...newStaff,
+            email: finalEmail,
+            status: 'Active',
+            username: finalEmail,
+            password,
+            mustChangePassword: true,
+            school_id: school.id
+          };
+          setStaff([...staff, staffMember]);
+          setGeneratedStaffCreds({ name: newStaff.name, username: finalEmail, password });
+          alert('Staff member added successfully!');
+        }
+      });
     }
     setNewStaff({ name: '', email: '', role: 'Teacher', assignments: [] });
     setShowAddStaffModal(false);
@@ -1122,19 +1135,16 @@ export const PrincipalDashboard = () => {
         class: newStudent.class,
         gender: newStudent.gender,
         status: newStudent.status
-      }).eq('id', editingStudent.id).then();
+      }).eq('id', editingStudent.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating student in Supabase:', error);
+          alert('Failed to update student in Supabase. Local state updated.');
+        }
+      });
 
       setEditingStudent(null);
     } else {
-      const student = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newStudent,
-        status: 'Active',
-        school_id: school.id
-      };
-      setStudents([...students, student]);
-      
-      // Sync with Supabase
+      // Sync with Supabase first to get the generated ID
       supabase.from('students').insert({
         name: newStudent.name,
         adm: newStudent.adm,
@@ -1142,7 +1152,24 @@ export const PrincipalDashboard = () => {
         gender: newStudent.gender,
         status: 'Active',
         school_id: school.id
-      }).then();
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating student in Supabase:', error);
+          alert('Database error saving new student: ' + error.message);
+          return;
+        }
+
+        if (data) {
+          const student = {
+            id: data.id,
+            ...newStudent,
+            status: 'Active',
+            school_id: school.id
+          };
+          setStudents([...students, student]);
+          alert('Student added successfully!');
+        }
+      });
     }
     setNewStudent({ name: '', adm: '', class: 'Form 1', streamId: '', gender: 'Male', profile_image: null });
     setShowAddStudentModal(false);
@@ -1173,26 +1200,39 @@ export const PrincipalDashboard = () => {
         name: newClass.name,
         teacher_id: newClass.teacherId,
         capacity: parseInt(String(newClass.capacity))
-      }).eq('id', editingClass.id).then();
+      }).eq('id', editingClass.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating class in Supabase:', error);
+          alert('Failed to update class in Supabase. Local state updated.');
+        }
+      });
 
       setEditingClass(null);
     } else {
-      const cls = {
-        id: classId,
-        name: newClass.name,
-        teacherId: newClass.teacherId,
-        capacity: newClass.capacity
-      };
-      setClasses([...classes, cls]);
-
-      // Sync with Supabase
+      // Sync with Supabase first to get the generated ID
       supabase.from('classes').insert({
-        id: classId,
         name: newClass.name,
         teacher_id: newClass.teacherId,
         capacity: parseInt(String(newClass.capacity)),
         school_id: school.id
-      }).then();
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating class in Supabase:', error);
+          alert('Database error saving new class: ' + error.message);
+          return;
+        }
+
+        if (data) {
+          const cls = {
+            id: data.id,
+            name: newClass.name,
+            teacherId: newClass.teacherId,
+            capacity: newClass.capacity
+          };
+          setClasses([...classes, cls]);
+          alert('Class added successfully!');
+        }
+      });
     }
 
     // Handle streams
@@ -1464,10 +1504,8 @@ export const PrincipalDashboard = () => {
 
   const handleCreateExam = async (e: FormEvent) => {
     e.preventDefault();
-    const examId = Math.random().toString(36).substr(2, 9);
     
     const examData: Database['public']['Tables']['exams']['Insert'] = {
-      id: examId,
       title: newExam.title,
       term: newExam.term,
       year: newExam.year,
@@ -1482,22 +1520,24 @@ export const PrincipalDashboard = () => {
       const { data, error } = await supabase.from('exams').insert(examData).select().single();
       if (error) throw error;
 
-      const exam = {
-        ...data,
-        schoolId: data.school_id,
-        createdAt: data.created_at,
-        classes: data.class_id ? [data.class_id] : [],
-        subjects: data.subject_id ? [data.subject_id] : [],
-        status: data.locked ? 'Completed' : 'Active'
-      };
+      if (data) {
+        const exam = {
+          ...data,
+          schoolId: data.school_id,
+          createdAt: data.created_at,
+          classes: data.class_id ? [data.class_id] : [],
+          subjects: data.subject_id ? [data.subject_id] : [],
+          status: data.locked ? 'Completed' : 'Active'
+        };
 
-      setExams([exam, ...exams]);
-      setNewExam({ title: '', term: 'Term 1', year: '2026', classes: [], subjects: [], startDate: '', endDate: '' });
-      setAcademicSubTab('overview');
-      alert('Exam created successfully! It is now visible to teachers.');
-    } catch (error) {
+        setExams([exam, ...exams]);
+        setNewExam({ title: '', term: 'Term 1', year: '2026', classes: [], subjects: [], startDate: '', endDate: '' });
+        setAcademicSubTab('overview');
+        alert('Exam created successfully! It is now visible to teachers.');
+      }
+    } catch (error: any) {
       console.error('Error creating exam:', error);
-      alert('Failed to create exam. Please try again.');
+      alert('Failed to create exam: ' + error.message);
     }
   };
 
