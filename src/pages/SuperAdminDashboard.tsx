@@ -23,7 +23,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Edit,
+  MessageSquare,
   Quote
 } from 'lucide-react';
 import { 
@@ -43,11 +43,12 @@ import {
 import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { NotificationBell, addNotification } from '../components/NotificationBell';
 
 interface School {
   id: string;
   name: string;
-  county: string;
+  location: string;
   students: string;
   status: 'Active' | 'Pending' | 'Suspended';
   date: string;
@@ -55,6 +56,7 @@ interface School {
   principalPass: string;
   teacherEmail: string;
   teacherPass: string;
+  subscriptionExpiresAt?: string;
 }
 
 interface ExamMaterial {
@@ -69,42 +71,68 @@ interface ExamMaterial {
   visibility: 'Public' | 'Hidden';
 }
 
+import { supabase } from '../lib/supabase';
+import { supabaseService } from '../services/supabaseService';
+
 export const SuperAdminDashboard = () => {
   const navigate = useNavigate();
+  const [adminProfile, setAdminProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schools' | 'analytics' | 'exams' | 'stories'>('dashboard');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showStoryModal, setShowStoryModal] = useState(false);
-  const [editingStory, setEditingStory] = useState<any>(null);
-  const [newStory, setNewStory] = useState({
-    studentName: '',
-    title: '',
-    description: '',
-    image: '',
-    date: new Date().toISOString().split('T')[0]
-  });
-
-  const [successStories, setSuccessStories] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_success_stories');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 's1',
-        studentName: 'Faith Mwangi',
-        title: 'Top Scorer 2025',
-        description: 'Faith achieved an incredible mean grade of A plain in the 2025 KCSE exams, emerging as the top student in her county.',
-        image: 'https://picsum.photos/seed/student1/400/300',
-        date: '2025-12-20'
-      }
-    ];
-  });
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Suspended'>('All');
-  const [generatedCreds, setGeneratedCreds] = useState<{principal: string, teacher: string, pass: string} | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('alakara_success_stories', JSON.stringify(successStories));
-  }, [successStories]);
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && profile.role === 'super-admin') {
+          setAdminProfile(profile);
+          loadSchools();
+        } else {
+          navigate('/super-admin');
+        }
+      } else {
+        // Fallback for mock login if no session
+        const isMockLoggedIn = true; // For now assume mock login works if navigated here
+        if (isMockLoggedIn) loadSchools();
+        else navigate('/super-admin');
+      }
+    };
+
+    const loadSchools = async () => {
+      try {
+        const data = await supabaseService.getAllSchools();
+        if (data) {
+          const mappedSchools: School[] = data.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            location: s.location,
+            students: '0', // This would need a count query in a real app
+            status: 'Active', // Default status
+            date: new Date(s.created_at).toLocaleDateString(),
+            principalEmail: s.principal_email,
+            principalPass: '********', // Don't show real passwords
+            teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
+            teacherPass: '********'
+          }));
+          setSchools(mappedSchools);
+        }
+      } catch (err) {
+        console.error('Error loading schools:', err);
+      }
+    };
+
+    checkSession();
+  }, [navigate]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [generatedCreds, setGeneratedCreds] = useState<{ principal: string; teacher: string; pass: string } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Suspended'>('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [examMaterials, setExamMaterials] = useState<ExamMaterial[]>(() => {
     const saved = localStorage.getItem('alakara_exam_materials');
@@ -146,61 +174,54 @@ export const SuperAdminDashboard = () => {
     ];
   });
 
-  useEffect(() => {
-    localStorage.setItem('alakara_exam_materials', JSON.stringify(examMaterials));
-  }, [examMaterials]);
-  
-  const [schools, setSchools] = useState<School[]>(() => {
-    const saved = localStorage.getItem('alakara_schools');
+  const [successStories, setSuccessStories] = useState<any[]>(() => {
+    const saved = localStorage.getItem('alakara_success_stories');
     if (saved) return JSON.parse(saved);
     return [
-      { 
-        id: '1', 
-        name: 'Oakwood Academy', 
-        location: 'Nairobi, KE', 
-        students: '1,200', 
-        status: 'Active', 
-        date: '2 hours ago',
-        principalEmail: 'principal.oakwood@alakara.ac.ke',
-        principalPass: 'P@ss123',
-        teacherEmail: 'staff.oakwood@alakara.ac.ke',
-        teacherPass: 'T@ech456'
+      {
+        id: '1',
+        name: 'Dr. Sarah Jenkins',
+        role: 'Principal, Oakwood Academy',
+        content: 'Alakara KE has completely transformed how we handle end-of-term examinations. The automated grading alone has saved our teachers hundreds of hours.',
+        image: 'https://picsum.photos/seed/sarah/100/100',
       },
-      { 
-        id: '2', 
-        name: 'City High School', 
-        location: 'Mombasa, KE', 
-        students: '2,450', 
-        status: 'Active', 
-        date: '5 hours ago',
-        principalEmail: 'principal.cityhigh@alakara.ac.ke',
-        principalPass: 'P@ss123',
-        teacherEmail: 'staff.cityhigh@alakara.ac.ke',
-        teacherPass: 'T@ech456'
+      {
+        id: '2',
+        name: 'Mark Thompson',
+        role: 'Exam Officer, City High School',
+        content: 'The real-time analytics provide insights we never had before. We can now identify struggling students instantly and provide targeted support.',
+        image: 'https://picsum.photos/seed/mark/100/100',
       },
-      { 
-        id: '3', 
-        name: 'Global International', 
-        location: 'Kisumu, KE', 
-        students: '850', 
-        status: 'Pending', 
-        date: '1 day ago',
-        principalEmail: 'principal.global@alakara.ac.ke',
-        principalPass: 'P@ss123',
-        teacherEmail: 'staff.global@alakara.ac.ke',
-        teacherPass: 'T@ech456'
+      {
+        id: '3',
+        name: 'Linda Chen',
+        role: 'IT Director, Global International',
+        content: 'Integration was seamless. The Supabase-backed infrastructure gives us peace of mind regarding data security and system reliability.',
+        image: 'https://picsum.photos/seed/linda/100/100',
       },
     ];
   });
 
   useEffect(() => {
-    localStorage.setItem('alakara_schools', JSON.stringify(schools));
-  }, [schools]);
+    localStorage.setItem('alakara_success_stories', JSON.stringify(successStories));
+  }, [successStories]);
+
+  useEffect(() => {
+    localStorage.setItem('alakara_exam_materials', JSON.stringify(examMaterials));
+  }, [examMaterials]);
+  
+  const [schools, setSchools] = useState<School[]>([]);
 
   const [newSchool, setNewSchool] = useState({
     name: '',
     location: '',
     students: '',
+  });
+
+  const [newStory, setNewStory] = useState({
+    name: '',
+    role: '',
+    content: '',
   });
 
   const generateCredentials = (schoolName: string) => {
@@ -217,6 +238,10 @@ export const SuperAdminDashboard = () => {
     e.preventDefault();
     const creds = generateCredentials(newSchool.name);
     
+    const defaultExpiry = new Date();
+    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+    const expiryStr = defaultExpiry.toISOString().split('T')[0];
+
     const school: School = {
       id: Math.random().toString(36).substr(2, 9),
       ...newSchool,
@@ -225,12 +250,47 @@ export const SuperAdminDashboard = () => {
       principalEmail: creds.principal,
       principalPass: creds.pass,
       teacherEmail: creds.teacher,
-      teacherPass: creds.pass
+      teacherPass: creds.pass,
+      subscriptionExpiresAt: expiryStr
     };
 
-    setSchools([school, ...schools]);
-    setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-    setNewSchool({ name: '', location: '', students: '' });
+    // Save to Supabase
+    supabase.from('schools').insert({
+      name: newSchool.name,
+      location: newSchool.location,
+      type: 'Secondary', // Default
+      principal_name: 'Principal',
+      principal_email: creds.principal
+    }).then(() => {
+      setSchools([school, ...schools]);
+      setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
+      setNewSchool({ name: '', location: '', students: '' });
+
+      addNotification({
+        title: 'New School Registered',
+        message: `${school.name} has been successfully registered on the platform.`,
+        type: 'success',
+        role: 'super-admin'
+      });
+    });
+  };
+
+  const handleAddStory = (e: FormEvent) => {
+    e.preventDefault();
+    const story = {
+      id: Math.random().toString(36).substr(2, 9),
+      ...newStory,
+      image: `https://picsum.photos/seed/${newStory.name}/100/100`
+    };
+    setSuccessStories([story, ...successStories]);
+    setNewStory({ name: '', role: '', content: '' });
+    setShowStoryModal(false);
+  };
+
+  const handleDeleteStory = (id: string) => {
+    if (window.confirm('Delete this success story?')) {
+      setSuccessStories(successStories.filter(s => s.id !== id));
+    }
   };
 
   const stats = [
@@ -240,7 +300,8 @@ export const SuperAdminDashboard = () => {
     { label: 'System Health', value: '99.9%', change: 'Stable', icon: ShieldCheck, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     navigate('/super-admin');
   };
 
@@ -248,6 +309,23 @@ export const SuperAdminDashboard = () => {
     setSchools(schools.map(school => {
       if (school.id === id) {
         const nextStatus = school.status === 'Active' ? 'Suspended' : 'Active';
+        
+        addNotification({
+          title: `School ${nextStatus}`,
+          message: `${school.name} status has been changed to ${nextStatus}.`,
+          type: nextStatus === 'Active' ? 'success' : 'warning',
+          role: 'super-admin'
+        });
+
+        // Also notify the principal
+        addNotification({
+          title: `Account ${nextStatus}`,
+          message: `Your school account has been ${nextStatus.toLowerCase()} by the system administrator.`,
+          type: nextStatus === 'Active' ? 'success' : 'error',
+          role: 'principal',
+          userId: school.id // Using school.id as userId for principal for now
+        });
+
         return { ...school, status: nextStatus as any };
       }
       return school;
@@ -255,7 +333,18 @@ export const SuperAdminDashboard = () => {
   };
 
   const handleMaterialAction = (id: string, action: 'Approved' | 'Rejected') => {
-    setExamMaterials(examMaterials.map(m => m.id === id ? { ...m, status: action } : m));
+    setExamMaterials(examMaterials.map(m => {
+      if (m.id === id) {
+        addNotification({
+          title: `Material ${action}`,
+          message: `The material "${m.title}" has been ${action.toLowerCase()}.`,
+          type: action === 'Approved' ? 'success' : 'error',
+          role: 'super-admin'
+        });
+        return { ...m, status: action };
+      }
+      return m;
+    }));
   };
 
   const toggleMaterialVisibility = (id: string) => {
@@ -273,38 +362,13 @@ export const SuperAdminDashboard = () => {
     }
   };
 
-  const handleAddStory = (e: FormEvent) => {
-    e.preventDefault();
-    if (editingStory) {
-      setSuccessStories(successStories.map(s => s.id === editingStory.id ? { ...newStory, id: s.id } : s));
-      setEditingStory(null);
-    } else {
-      const story = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newStory
-      };
-      setSuccessStories([story, ...successStories]);
-    }
-    setNewStory({ studentName: '', title: '', description: '', image: '', date: new Date().toISOString().split('T')[0] });
-    setShowStoryModal(false);
-  };
-
-  const handleDeleteStory = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this success story?')) {
-      setSuccessStories(successStories.filter(s => s.id !== id));
-    }
-  };
-
-  const openEditStory = (story: any) => {
-    setEditingStory(story);
-    setNewStory({
-      studentName: story.studentName,
-      title: story.title,
-      description: story.description,
-      image: story.image,
-      date: story.date
-    });
-    setShowStoryModal(true);
+  const updateSchoolExpiry = (id: string, date: string) => {
+    setSchools(schools.map(school => {
+      if (school.id === id) {
+        return { ...school, subscriptionExpiresAt: date };
+      }
+      return school;
+    }));
   };
 
   const filteredSchools = schools.filter(school => {
@@ -379,7 +443,7 @@ export const SuperAdminDashboard = () => {
             onClick={() => setActiveTab('stories')}
             className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'stories' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
           >
-            <Quote className="w-5 h-5" />
+            <MessageSquare className="w-5 h-5" />
             Success Stories
           </button>
           <button 
@@ -422,14 +486,11 @@ export const SuperAdminDashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="p-2 text-gray-400 hover:text-kenya-red relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-kenya-red rounded-full border-2 border-white" />
-            </button>
+            <NotificationBell role="super-admin" />
             <div className="h-8 w-px bg-gray-200 mx-2" />
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-kenya-black">Super Admin</p>
+                <p className="text-sm font-bold text-kenya-black">{adminProfile?.name || 'Solomon Isiya'}</p>
                 <p className="text-xs text-gray-500">System Controller</p>
               </div>
               <img 
@@ -484,8 +545,8 @@ export const SuperAdminDashboard = () => {
               </div>
 
               {/* Charts Preview */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                   <h3 className="font-bold text-kenya-black mb-6">Registration Growth</h3>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -507,6 +568,45 @@ export const SuperAdminDashboard = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
+
+                {/* System Status */}
+                <div className="bg-kenya-black rounded-3xl p-8 text-white shadow-xl flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="bg-kenya-green p-2 rounded-xl">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <h4 className="font-bold">System Status</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Network Status</span>
+                        <span className="font-bold text-kenya-green flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-kenya-green animate-pulse"></span>
+                          Online
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Active Sessions</span>
+                        <span className="font-bold">1,248</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Storage Used</span>
+                        <span className="font-bold">12.4 TB / 50 TB</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">Last Backup</span>
+                        <span className="font-bold">Today, 02:15 AM</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button className="w-full mt-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold transition-all">
+                    Download System Logs
+                  </button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                 <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                   <h3 className="font-bold text-kenya-black mb-6">Performance by Subject</h3>
                   <div className="h-64 w-full">
@@ -612,14 +712,6 @@ export const SuperAdminDashboard = () => {
                       </div>
                     </div>
                   </div>
-
-                  <div className="bg-gradient-to-br from-kenya-black via-kenya-red to-kenya-green p-6 rounded-2xl text-white shadow-lg shadow-kenya-black/20">
-                    <h3 className="font-bold mb-2">Need Support?</h3>
-                    <p className="text-gray-100 text-sm mb-6 leading-relaxed">
-                      Our technical team is available 24/7 for system-wide emergencies in Kenya.
-                    </p>
-                    <Button variant="secondary" size="sm" className="w-full">Open Support Ticket</Button>
-                  </div>
                 </div>
               </div>
             </>
@@ -676,6 +768,7 @@ export const SuperAdminDashboard = () => {
                         <th className="px-6 py-4">Principal Account</th>
                         <th className="px-6 py-4">Staff Account</th>
                         <th className="px-6 py-4">Students</th>
+                        <th className="px-6 py-4">Active Until</th>
                         <th className="px-6 py-4">Status</th>
                         <th className="px-6 py-4">Actions</th>
                       </tr>
@@ -712,6 +805,14 @@ export const SuperAdminDashboard = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-kenya-black font-medium">{school.students}</td>
+                          <td className="px-6 py-4">
+                            <input 
+                              type="date" 
+                              value={school.subscriptionExpiresAt || ''}
+                              onChange={(e) => updateSchoolExpiry(school.id, e.target.value)}
+                              className="bg-gray-50 border border-gray-200 rounded-lg text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-kenya-green transition-all"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               school.status === 'Active' ? 'bg-kenya-green/10 text-kenya-green' : 
@@ -859,19 +960,12 @@ export const SuperAdminDashboard = () => {
             <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-2xl font-bold text-kenya-black">Success Stories</h1>
-                  <p className="text-gray-500">Manage student achievements and success stories displayed on the platform.</p>
+                  <h1 className="text-2xl font-bold text-kenya-black">Success Stories Management</h1>
+                  <p className="text-gray-500">Manage testimonials and success stories displayed on the landing page.</p>
                 </div>
-                <Button 
-                  onClick={() => {
-                    setEditingStory(null);
-                    setNewStory({ studentName: '', title: '', description: '', image: '', date: new Date().toISOString().split('T')[0] });
-                    setShowStoryModal(true);
-                  }}
-                  className="gap-2"
-                >
+                <Button onClick={() => setShowStoryModal(true)} className="gap-2">
                   <Plus className="w-4 h-4" />
-                  Post Success Story
+                  Add Success Story
                 </Button>
               </div>
 
@@ -879,55 +973,36 @@ export const SuperAdminDashboard = () => {
                 {successStories.map((story) => (
                   <motion.div
                     key={story.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group"
+                    className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm relative group"
                   >
-                    <div className="relative h-48 overflow-hidden">
+                    <button 
+                      onClick={() => handleDeleteStory(story.id)}
+                      className="absolute top-4 right-4 p-2 text-gray-400 hover:text-kenya-red opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center gap-4 mb-4">
                       <img 
-                        src={story.image || 'https://picsum.photos/seed/placeholder/400/300'} 
-                        alt={story.studentName}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        src={story.image} 
+                        alt={story.name} 
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-50"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="absolute top-4 right-4 flex gap-2">
-                        <button 
-                          onClick={() => openEditStory(story)}
-                          className="p-2 bg-white/90 backdrop-blur-sm rounded-lg text-gray-600 hover:text-kenya-green shadow-sm transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteStory(story.id)}
-                          className="p-2 bg-white/90 backdrop-blur-sm rounded-lg text-gray-600 hover:text-kenya-red shadow-sm transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div>
+                        <h4 className="font-bold text-kenya-black">{story.name}</h4>
+                        <p className="text-xs text-gray-500">{story.role}</p>
                       </div>
                     </div>
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-bold text-kenya-black">{story.studentName}</h3>
-                        <span className="text-xs text-gray-400">{story.date}</span>
-                      </div>
-                      <p className="text-sm font-bold text-kenya-red mb-3 uppercase tracking-wider">{story.title}</p>
-                      <p className="text-sm text-gray-600 line-clamp-3 leading-relaxed">
-                        {story.description}
-                      </p>
-                    </div>
+                    <p className="text-sm text-gray-600 italic leading-relaxed">
+                      "{story.content}"
+                    </p>
                   </motion.div>
                 ))}
               </div>
-
-              {successStories.length === 0 && (
-                <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
-                  <Quote className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                  <p className="text-gray-400 font-medium">No success stories posted yet.</p>
-                </div>
-              )}
             </div>
-          ) : activeTab === 'analytics' ? (
+          ) : (
             <div className="space-y-8">
               <div className="mb-8">
                 <h1 className="text-2xl font-bold text-kenya-black">Advanced Analytics</h1>
@@ -1034,97 +1109,8 @@ export const SuperAdminDashboard = () => {
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
         </div>
-
-        {/* Story Modal */}
-        {showStoryModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-kenya-black/60 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-white rounded-[2.5rem] w-full max-w-2xl p-8 shadow-2xl border border-gray-100"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-bold text-kenya-black">
-                  {editingStory ? 'Edit Success Story' : 'Post Success Story'}
-                </h3>
-                <button onClick={() => setShowStoryModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleAddStory} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-kenya-black ml-1">Student Name</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={newStory.studentName}
-                      onChange={(e) => setNewStory({...newStory, studentName: e.target.value})}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
-                      placeholder="e.g. John Doe"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-kenya-black ml-1">Title</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={newStory.title}
-                      onChange={(e) => setNewStory({...newStory, title: e.target.value})}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
-                      placeholder="e.g. Top Scorer 2025"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-kenya-black ml-1">Image URL</label>
-                  <input 
-                    type="url" 
-                    required
-                    value={newStory.image}
-                    onChange={(e) => setNewStory({...newStory, image: e.target.value})}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-kenya-black ml-1">Description / Story Content</label>
-                  <textarea 
-                    required
-                    rows={4}
-                    value={newStory.description}
-                    onChange={(e) => setNewStory({...newStory, description: e.target.value})}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 resize-none"
-                    placeholder="Write the success story here..."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-kenya-black ml-1">Date</label>
-                  <input 
-                    type="date" 
-                    required
-                    value={newStory.date}
-                    onChange={(e) => setNewStory({...newStory, date: e.target.value})}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
-                  />
-                </div>
-
-                <div className="flex gap-4 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowStoryModal(false)} className="flex-1 py-4 rounded-xl font-bold">Cancel</Button>
-                  <Button type="submit" className="flex-1 py-4 rounded-xl font-bold">
-                    {editingStory ? 'Update Story' : 'Post Story'}
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
 
         {/* Add School Modal */}
         {showAddModal && (
@@ -1218,6 +1204,63 @@ export const SuperAdminDashboard = () => {
                     <Button onClick={() => setShowAddModal(false)} className="w-full">Done</Button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Add Story Modal */}
+        {showStoryModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <h3 className="text-xl font-bold text-kenya-black">Add Success Story</h3>
+                <button onClick={() => setShowStoryModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-8">
+                <form onSubmit={handleAddStory} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Person Name</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={newStory.name}
+                      onChange={(e) => setNewStory({ ...newStory, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                      placeholder="e.g. Dr. Sarah Jenkins"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Role / Title</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={newStory.role}
+                      onChange={(e) => setNewStory({ ...newStory, role: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                      placeholder="e.g. Principal, Oakwood Academy"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Success Story / Content</label>
+                    <textarea 
+                      required
+                      rows={4}
+                      value={newStory.content}
+                      onChange={(e) => setNewStory({ ...newStory, content: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green resize-none"
+                      placeholder="Share the success story..."
+                    />
+                  </div>
+                  <Button type="submit" className="w-full py-4">Publish Story</Button>
+                </form>
               </div>
             </motion.div>
           </div>
