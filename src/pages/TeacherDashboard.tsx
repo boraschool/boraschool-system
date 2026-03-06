@@ -137,66 +137,6 @@ export const TeacherDashboard = () => {
     );
   }
 
-  useEffect(() => {
-    const fetchAllData = async () => {
-      if (!currentTeacher?.school_id) return;
-      
-      try {
-        // Fetch Students
-        const { data: studentsData } = await supabase
-          .from('students')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
-        if (studentsData) setAllStudents(studentsData);
-
-        // Fetch Classes
-        const { data: classesData } = await supabase
-          .from('classes')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
-        if (classesData) setClasses(classesData);
-
-        // Fetch Exams
-        const { data: examsData } = await supabase
-          .from('exams')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
-        if (examsData) {
-          setExams(examsData.map(e => ({
-            ...e,
-            schoolId: e.school_id,
-            createdAt: e.created_at,
-            classes: e.class_id ? [e.class_id] : [],
-            subjects: e.subject_id ? [e.subject_id] : [],
-            status: e.locked ? 'Completed' : 'Active',
-            published: e.locked // Assuming locked means published for now
-          })));
-        }
-
-        // Fetch Marks for all exams
-        const { data: marksData } = await supabase
-          .from('marks')
-          .select('*');
-        if (marksData) {
-          setMarks(marksData.map(m => ({
-            id: m.id,
-            examId: m.exam_id,
-            studentId: m.student_id,
-            subject: m.subject_id,
-            score: String(m.score),
-            grade: m.grade || '',
-            updatedAt: m.created_at
-          })));
-        }
-
-      } catch (error) {
-        console.error('Error fetching data from Supabase:', error);
-      }
-    };
-
-    fetchAllData();
-  }, [currentTeacher?.school_id]);
-
   const [classes, setClasses] = useState<any[]>(() => {
     const saved = localStorage.getItem('alakara_classes');
     if (saved) return JSON.parse(saved);
@@ -552,22 +492,19 @@ export const TeacherDashboard = () => {
       const supabaseMarks = newMarks
         .filter(m => m.examId === activeExam.id && m.subject === subject)
         .map(m => ({
-          id: m.id || `${activeExam.id}-${m.studentId}-${subject}`,
           exam_id: m.examId,
           student_id: m.studentId,
-          subject_id: m.subject,
-          score: parseFloat(String(m.score || m.percentage)),
+          subject_id: m.subject, // Map subject name to subject_id for now
+          score: parseFloat(m.score || m.percentage),
           grade: m.grade
         }));
-
-      const { error } = await supabase.from('marks').upsert(supabaseMarks);
-      if (error) throw error;
-
+      
+      await supabaseService.upsertMarks(supabaseMarks);
       addLog(isFinal ? 'Submit Marks' : 'Save Draft', `Updated marks for ${activeExam.title} (${subject})`);
-      alert(isFinal ? 'Marks submitted as final!' : 'Marks saved successfully to Supabase!');
-    } catch (error) {
-      console.error('Error saving marks to Supabase:', error);
-      alert('Failed to save marks to Supabase. Please check your connection.');
+      alert(isFinal ? 'Marks submitted as final!' : 'Draft saved successfully!');
+    } catch (err: any) {
+      console.error('Error saving marks to Supabase:', err);
+      alert('Failed to save marks to cloud. They are saved locally for now.');
     }
     
     if (isFinal) {
