@@ -82,7 +82,30 @@ export const PrincipalLogin = () => {
         return;
       }
 
-      // 2. Fallback to LocalStorage for prototype
+      // 2. Fallback: Check profiles table for custom credentials (cross-device support)
+      const { data: customProfile, error: customError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .eq('role', 'principal')
+        .single();
+
+      if (customProfile) {
+        const { data: school, error: schoolError } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', customProfile.school_id)
+          .single();
+
+        if (school) {
+          localStorage.setItem('alakara_current_school', JSON.stringify(school));
+          navigate('/principal/dashboard');
+          return;
+        }
+      }
+
+      // 3. Fallback to LocalStorage for prototype (legacy)
       const savedSchools = localStorage.getItem('alakara_schools');
       const schools = savedSchools ? JSON.parse(savedSchools) : [];
       const schoolByCreds = schools.find((s: any) => s.principalEmail === email && s.principalPass === password);
@@ -115,7 +138,7 @@ export const PrincipalLogin = () => {
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
           <div className="text-center">
-            <span className="text-3xl font-bold text-white tracking-tight">Alakara <span className="text-kenya-red">Principal</span></span>
+            <span className="text-3xl font-bold text-white tracking-tight">Bora School <span className="text-kenya-red">Principal</span></span>
           </div>
         </Link>
         
@@ -223,10 +246,10 @@ export const PrincipalLogin = () => {
         />
 
         <p className="mt-8 text-center text-xs text-gray-500 tracking-widest uppercase">
-          &copy; 2026 Alakara KE Leadership Portal
+          &copy; 2026 Bora School KE Leadership Portal
         </p>
         <div className="mt-8 text-center text-gray-400 text-sm">
-          New to Alakara? <Link to="/register-school" className="text-kenya-green font-bold hover:underline">Register your school here</Link>
+          New to Bora School? <Link to="/register-school" className="text-kenya-green font-bold hover:underline">Register your school here</Link>
         </div>
       </div>
     </div>

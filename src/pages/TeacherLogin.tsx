@@ -46,7 +46,7 @@ export const TeacherLogin = () => {
     try {
       // 1. Try Supabase Auth first
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: username.includes('@') ? username : `${username}@alakara.ac.ke`,
+        email: username.includes('@') ? username : `${username}@boraschool.ac.ke`, // Default fallback
         password: password,
       });
 
@@ -67,7 +67,23 @@ export const TeacherLogin = () => {
         return;
       }
 
-      // 2. Fallback to LocalStorage for prototype/demo
+      // 2. Fallback: Check profiles table for custom credentials (cross-device support)
+      // This allows teachers added by principals (who don't have a Supabase Auth account yet) to login
+      const { data: customProfile, error: customError } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`email.eq.${username},email.ilike.${username}@%`)
+        .eq('password', password)
+        .eq('role', 'teacher')
+        .single();
+
+      if (customProfile) {
+        localStorage.setItem('alakara_current_teacher', JSON.stringify(customProfile));
+        navigate('/teacher/dashboard');
+        return;
+      }
+
+      // 3. Fallback to LocalStorage for prototype/demo (legacy)
       const staff = JSON.parse(localStorage.getItem('alakara_staff') || '[]');
       const teacher = staff.find((s: any) => s.username === username && s.password === password);
 
@@ -140,7 +156,7 @@ export const TeacherLogin = () => {
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
           <div className="text-center">
-            <span className="text-3xl font-bold text-[#1a1a1a] tracking-tight">Alakara <span className="italic text-[#5A5A40]">Educators</span></span>
+            <span className="text-3xl font-bold text-[#1a1a1a] tracking-tight">Bora School <span className="italic text-[#5A5A40]">Educators</span></span>
           </div>
         </Link>
         
@@ -341,7 +357,7 @@ export const TeacherLogin = () => {
         />
 
         <p className="mt-12 text-center text-xs text-gray-400 tracking-widest uppercase">
-          &copy; 2026 Alakara KE Educators
+          &copy; 2026 Bora School KE Educators
         </p>
       </div>
     </div>

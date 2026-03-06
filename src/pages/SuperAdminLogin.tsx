@@ -109,7 +109,7 @@ export const SuperAdminLogin = () => {
             <GraduationCap className="w-8 h-8 text-kenya-green" />
           </div>
           <div className="text-left">
-            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Alakara <span className="text-kenya-red">HQ</span></span>
+            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Bora School <span className="text-kenya-red">HQ</span></span>
             <span className="block text-[10px] text-kenya-green font-bold tracking-[0.3em] uppercase opacity-70">Central Command</span>
           </div>
         </Link>
@@ -239,7 +239,7 @@ export const SuperAdminLogin = () => {
 
         <div className="mt-8 flex justify-between items-center px-2">
           <p className="text-[9px] text-gray-600 uppercase tracking-[0.3em]">
-            &copy; 2026 Alakara KE HQ
+            &copy; 2026 Bora School KE HQ
           </p>
           <div className="flex gap-4">
             <div className="w-1 h-1 rounded-full bg-kenya-green opacity-50" />

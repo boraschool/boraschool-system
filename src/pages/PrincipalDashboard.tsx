@@ -86,12 +86,27 @@ export const PrincipalDashboard = () => {
   useEffect(() => {
     const fetchSchoolData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      let profileId = session?.user.id;
+      let profileEmail = session?.user.email;
+
+      // Fallback: Check localStorage if no session
+      if (!profileId) {
+        const savedSchool = localStorage.getItem('alakara_current_school');
+        if (savedSchool) {
+          const schoolObj = JSON.parse(savedSchool);
+          profileEmail = schoolObj.principal_email;
+        }
+      }
+
+      if (profileId || profileEmail) {
+        const query = supabase.from('profiles').select('*');
+        if (profileId) {
+          query.eq('id', profileId);
+        } else {
+          query.eq('email', profileEmail).eq('role', 'principal');
+        }
+
+        const { data: profile } = await query.single();
         
         if (profile) {
           const { data: schoolData } = await supabase
@@ -210,11 +225,33 @@ export const PrincipalDashboard = () => {
     reader.readAsBinaryString(file);
   };
 
-  const saveStagedMarks = () => {
+  const saveStagedMarks = async () => {
     if (stagedMarks) {
-      setMarks(stagedMarks);
-      setStagedMarks(null);
-      alert('Bulk marks saved successfully!');
+      try {
+        const examId = selectedProcessingExamId;
+        const supabaseMarks = stagedMarks
+          .filter(m => m.examId === examId)
+          .map(m => ({
+            id: m.id || `${examId}-${m.studentId}-${m.subject}`,
+            exam_id: examId,
+            student_id: m.studentId,
+            subject_id: m.subject,
+            score: parseFloat(String(m.score)),
+            created_at: new Date().toISOString()
+          }));
+
+        const { error } = await supabase.from('marks').upsert(supabaseMarks);
+        if (error) throw error;
+
+        setMarks(stagedMarks);
+        setStagedMarks(null);
+        alert('Bulk marks saved and synced successfully to Supabase!');
+      } catch (error) {
+        console.error('Error syncing bulk marks:', error);
+        alert('Failed to sync marks to Supabase. Local state updated.');
+        setMarks(stagedMarks);
+        setStagedMarks(null);
+      }
     }
   };
 
@@ -936,6 +973,57 @@ export const PrincipalDashboard = () => {
     return () => clearInterval(interval);
   }, [navigate]);
 
+  useEffect(() => {
+    const fetchAllData = async () => {
+      if (!school?.id) return;
+      
+      try {
+        // Fetch Students
+        const { data: studentsData } = await supabase
+          .from('students')
+          .select('*')
+          .eq('school_id', school.id);
+        if (studentsData) setStudents(studentsData);
+
+        // Fetch Classes
+        const { data: classesData } = await supabase
+          .from('classes')
+          .select('*')
+          .eq('school_id', school.id);
+        if (classesData) setClasses(classesData);
+
+        // Fetch Exams
+        const { data: examsData } = await supabase
+          .from('exams')
+          .select('*')
+          .eq('school_id', school.id);
+        if (examsData) {
+          // Map snake_case to camelCase if needed, or just use as is
+          setExams(examsData.map(e => ({
+            ...e,
+            schoolId: e.school_id,
+            createdAt: e.created_at,
+            // For now, assume classes/subjects are stored in metadata or handle the mismatch
+            classes: e.class_id ? [e.class_id] : [],
+            subjects: e.subject_id ? [e.subject_id] : []
+          })));
+        }
+
+        // Fetch Staff (Profiles)
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('role', 'teacher'); // Or filter by school if profiles had school_id
+        if (profilesData) setStaff(profilesData);
+
+      } catch (error) {
+        console.error('Error fetching data from Supabase:', error);
+      }
+    };
+
+    fetchAllData();
+  }, [school?.id]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('alakara_current_school');
@@ -945,6 +1033,10 @@ export const PrincipalDashboard = () => {
   const handleAddStaff = (e: FormEvent) => {
     e.preventDefault();
     
+    // Slugify school name for email extension
+    const schoolSlug = school.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const emailExtension = `${schoolSlug}.ac.ke`;
+
     // Auto-generate email/username from name if not provided
     let finalEmail = newStaff.email.trim();
     if (!finalEmail) {
@@ -952,12 +1044,12 @@ export const PrincipalDashboard = () => {
       const baseUsername = nameParts.length > 1 
         ? `${nameParts[0][0]}${nameParts[1]}` 
         : nameParts[0];
-      finalEmail = `${baseUsername}@alakara.ac.ke`;
+      finalEmail = `${baseUsername}@${emailExtension}`;
     } else if (!finalEmail.includes('@')) {
-      finalEmail = `${finalEmail.toLowerCase()}@alakara.ac.ke`;
-    } else if (!finalEmail.endsWith('@alakara.ac.ke')) {
+      finalEmail = `${finalEmail.toLowerCase()}@${emailExtension}`;
+    } else if (!finalEmail.endsWith(`@${emailExtension}`)) {
       const [prefix] = finalEmail.split('@');
-      finalEmail = `${prefix.toLowerCase()}@alakara.ac.ke`;
+      finalEmail = `${prefix.toLowerCase()}@${emailExtension}`;
     }
 
     if (editingStaff) {
@@ -975,33 +1067,47 @@ export const PrincipalDashboard = () => {
         name: newStaff.name,
         email: finalEmail,
         role: newStaff.role.toLowerCase()
-      }).eq('id', editingStaff.id).then();
+      }).eq('id', editingStaff.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating profile in Supabase:', error);
+          alert('Failed to update profile in Supabase. Local state updated.');
+        }
+      });
 
       setEditingStaff(null);
     } else {
       const password = Math.random().toString(36).slice(-8);
 
-      const staffMember = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newStaff,
-        email: finalEmail,
-        status: 'Active',
-        username: finalEmail,
-        password,
-        mustChangePassword: true,
-        school_id: school.id
-      };
-      setStaff([...staff, staffMember]);
-      
-      // Sync with Supabase (Note: This doesn't create an Auth user, just a profile record)
+      // Sync with Supabase first to get the generated ID
       supabase.from('profiles').insert({
         name: newStaff.name,
         email: finalEmail,
         role: newStaff.role.toLowerCase(),
-        school_id: school.id
-      }).then();
+        school_id: school.id,
+        password: password // Store password in profile for cross-device login fallback
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating profile in Supabase:', error);
+          alert('Database error saving new user: ' + error.message);
+          return;
+        }
 
-      setGeneratedStaffCreds({ name: newStaff.name, username: finalEmail, password });
+        if (data) {
+          const staffMember = {
+            id: data.id,
+            ...newStaff,
+            email: finalEmail,
+            status: 'Active',
+            username: finalEmail,
+            password,
+            mustChangePassword: true,
+            school_id: school.id
+          };
+          setStaff([...staff, staffMember]);
+          setGeneratedStaffCreds({ name: newStaff.name, username: finalEmail, password });
+          alert('Staff member added successfully!');
+        }
+      });
     }
     setNewStaff({ name: '', email: '', role: 'Teacher', assignments: [] });
     setShowAddStaffModal(false);
@@ -1047,27 +1153,43 @@ export const PrincipalDashboard = () => {
         name: newStudent.name,
         adm: newStudent.adm,
         class: newStudent.class,
+        gender: newStudent.gender,
         status: newStudent.status
-      }).eq('id', editingStudent.id).then();
+      }).eq('id', editingStudent.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating student in Supabase:', error);
+          alert('Failed to update student in Supabase. Local state updated.');
+        }
+      });
 
       setEditingStudent(null);
     } else {
-      const student = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...newStudent,
-        status: 'Active',
-        school_id: school.id
-      };
-      setStudents([...students, student]);
-      
-      // Sync with Supabase
+      // Sync with Supabase first to get the generated ID
       supabase.from('students').insert({
         name: newStudent.name,
         adm: newStudent.adm,
         class: newStudent.class,
+        gender: newStudent.gender,
         status: 'Active',
         school_id: school.id
-      }).then();
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating student in Supabase:', error);
+          alert('Database error saving new student: ' + error.message);
+          return;
+        }
+
+        if (data) {
+          const student = {
+            id: data.id,
+            ...newStudent,
+            status: 'Active',
+            school_id: school.id
+          };
+          setStudents([...students, student]);
+          alert('Student added successfully!');
+        }
+      });
     }
     setNewStudent({ name: '', adm: '', class: 'Form 1', streamId: '', gender: 'Male', profile_image: null });
     setShowAddStudentModal(false);
@@ -1092,15 +1214,45 @@ export const PrincipalDashboard = () => {
     
     if (editingClass) {
       setClasses(classes.map(c => c.id === editingClass.id ? { ...editingClass, name: newClass.name, teacherId: newClass.teacherId, capacity: newClass.capacity } : c));
+      
+      // Sync with Supabase
+      supabase.from('classes').update({
+        name: newClass.name,
+        teacher_id: newClass.teacherId,
+        capacity: parseInt(String(newClass.capacity))
+      }).eq('id', editingClass.id).then(({ error }) => {
+        if (error) {
+          console.error('Error updating class in Supabase:', error);
+          alert('Failed to update class in Supabase. Local state updated.');
+        }
+      });
+
       setEditingClass(null);
     } else {
-      const cls = {
-        id: classId,
+      // Sync with Supabase first to get the generated ID
+      supabase.from('classes').insert({
         name: newClass.name,
-        teacherId: newClass.teacherId,
-        capacity: newClass.capacity
-      };
-      setClasses([...classes, cls]);
+        teacher_id: newClass.teacherId,
+        capacity: parseInt(String(newClass.capacity)),
+        school_id: school.id
+      }).select().single().then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating class in Supabase:', error);
+          alert('Database error saving new class: ' + error.message);
+          return;
+        }
+
+        if (data) {
+          const cls = {
+            id: data.id,
+            name: newClass.name,
+            teacherId: newClass.teacherId,
+            capacity: newClass.capacity
+          };
+          setClasses([...classes, cls]);
+          alert('Class added successfully!');
+        }
+      });
     }
 
     // Handle streams
@@ -1139,9 +1291,16 @@ export const PrincipalDashboard = () => {
     setShowAddClassModal(true);
   };
 
-  const removeClass = (id: string) => {
+  const removeClass = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this class?')) {
-      setClasses(classes.filter(c => c.id !== id));
+      try {
+        const { error } = await supabase.from('classes').delete().eq('id', id);
+        if (error) throw error;
+        setClasses(classes.filter(c => c.id !== id));
+      } catch (error) {
+        console.error('Error deleting class:', error);
+        alert('Failed to delete class from Supabase.');
+      }
     }
   };
 
@@ -1159,21 +1318,39 @@ export const PrincipalDashboard = () => {
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
         const newStudents = [...students];
+        const studentsToInsert: any[] = [];
+
         data.forEach((row, index) => {
           if (index === 0) return; // Skip header
           if (!row[0]) return; // Skip empty rows
 
-          newStudents.push({
-            id: Math.random().toString(36).substr(2, 9),
+          const studentId = Math.random().toString(36).substr(2, 9);
+          const studentData = {
+            id: studentId,
             name: String(row[0]).trim(),
             adm: String(row[1] || '').trim(),
             class: String(row[2] || 'Form 1').trim(),
-            status: 'Active'
-          });
+            status: 'Active',
+            school_id: school.id
+          };
+
+          newStudents.push(studentData);
+          studentsToInsert.push(studentData);
         });
 
         setStudents(newStudents);
-        alert(`Successfully imported ${newStudents.length - students.length} students!`);
+        
+        // Sync with Supabase
+        if (studentsToInsert.length > 0) {
+          supabase.from('students').insert(studentsToInsert).then(({ error }) => {
+            if (error) {
+              console.error('Error syncing bulk students:', error);
+              alert('Partial sync failure: Some students could not be saved to Supabase.');
+            } else {
+              alert(`Successfully imported ${studentsToInsert.length} students and synced with Supabase!`);
+            }
+          });
+        }
       } catch (err) {
         alert('Error parsing Excel file. Please ensure it follows the format: Name, Admission No, Class');
       }
@@ -1195,21 +1372,39 @@ export const PrincipalDashboard = () => {
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
         const newStudents = [...students];
+        const studentsToInsert: any[] = [];
+
         data.forEach((row, index) => {
           if (index === 0) return; // Skip header
           if (!row[0]) return; // Skip empty rows
 
-          newStudents.push({
-            id: Math.random().toString(36).substr(2, 9),
+          const studentId = Math.random().toString(36).substr(2, 9);
+          const studentData = {
+            id: studentId,
             name: String(row[0]).trim(),
             adm: String(row[1] || '').trim(),
             class: className,
-            status: 'Active'
-          });
+            status: 'Active',
+            school_id: school.id
+          };
+
+          newStudents.push(studentData);
+          studentsToInsert.push(studentData);
         });
 
         setStudents(newStudents);
-        alert(`Successfully imported ${newStudents.length - students.length} students to ${className}!`);
+
+        // Sync with Supabase
+        if (studentsToInsert.length > 0) {
+          supabase.from('students').insert(studentsToInsert).then(({ error }) => {
+            if (error) {
+              console.error('Error syncing bulk students to class:', error);
+              alert('Partial sync failure: Some students could not be saved to Supabase.');
+            } else {
+              alert(`Successfully imported ${studentsToInsert.length} students to ${className} and synced with Supabase!`);
+            }
+          });
+        }
       } catch (err) {
         alert('Error parsing Excel file. Please ensure it follows the format: Name, Admission No');
       }
@@ -1217,9 +1412,16 @@ export const PrincipalDashboard = () => {
     reader.readAsBinaryString(file);
   };
 
-  const removeStudent = (id: string) => {
+  const removeStudent = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this student?')) {
-      setStudents(students.filter(s => s.id !== id));
+      try {
+        const { error } = await supabase.from('students').delete().eq('id', id);
+        if (error) throw error;
+        setStudents(students.filter(s => s.id !== id));
+      } catch (error) {
+        console.error('Error deleting student:', error);
+        alert('Failed to delete student from Supabase.');
+      }
     }
   };
 
@@ -1320,19 +1522,43 @@ export const PrincipalDashboard = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  const handleCreateExam = (e: FormEvent) => {
+  const handleCreateExam = async (e: FormEvent) => {
     e.preventDefault();
-    const exam = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...newExam,
-      status: 'Active', // Active means teachers can enter marks
-      createdAt: new Date().toISOString(),
-      schoolId: school.id
+    
+    const examData: Database['public']['Tables']['exams']['Insert'] = {
+      title: newExam.title,
+      term: newExam.term,
+      year: newExam.year,
+      class_id: newExam.classes[0] || null, // Use first class for now to match schema
+      subject_id: newExam.subjects[0] || null, // Use first subject for now to match schema
+      locked: false,
+      weighting: 100,
+      school_id: school.id
     };
-    setExams([exam, ...exams]);
-    setNewExam({ title: '', term: 'Term 1', year: '2026', classes: [], subjects: [], startDate: '', endDate: '' });
-    setAcademicSubTab('overview');
-    alert('Exam created successfully! It is now visible to teachers.');
+
+    try {
+      const { data, error } = await supabase.from('exams').insert(examData).select().single();
+      if (error) throw error;
+
+      if (data) {
+        const exam = {
+          ...data,
+          schoolId: data.school_id,
+          createdAt: data.created_at,
+          classes: data.class_id ? [data.class_id] : [],
+          subjects: data.subject_id ? [data.subject_id] : [],
+          status: data.locked ? 'Completed' : 'Active'
+        };
+
+        setExams([exam, ...exams]);
+        setNewExam({ title: '', term: 'Term 1', year: '2026', classes: [], subjects: [], startDate: '', endDate: '' });
+        setAcademicSubTab('overview');
+        alert('Exam created successfully! It is now visible to teachers.');
+      }
+    } catch (error: any) {
+      console.error('Error creating exam:', error);
+      alert('Failed to create exam: ' + error.message);
+    }
   };
 
   const [logs, setLogs] = useState<any[]>(() => {
@@ -1385,9 +1611,16 @@ export const PrincipalDashboard = () => {
     }
   };
 
-  const deleteExam = (id: string) => {
+  const deleteExam = async (id: string) => {
     if (window.confirm('Delete this exam? All associated marks will be lost.')) {
-      setExams(exams.filter(e => e.id !== id));
+      try {
+        const { error } = await supabase.from('exams').delete().eq('id', id);
+        if (error) throw error;
+        setExams(exams.filter(e => e.id !== id));
+      } catch (error) {
+        console.error('Error deleting exam:', error);
+        alert('Failed to delete exam from Supabase.');
+      }
     }
   };
 
@@ -2073,7 +2306,7 @@ export const PrincipalDashboard = () => {
               <div className="bg-kenya-green p-2 rounded-lg">
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight">Alakara <span className="text-kenya-red">Principal</span></span>
+              <span className="text-xl font-bold tracking-tight">Bora School <span className="text-kenya-red">Principal</span></span>
             </div>
             <button 
               className="lg:hidden text-gray-400 hover:text-white"
@@ -2802,25 +3035,33 @@ export const PrincipalDashboard = () => {
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        <label className="text-sm font-bold text-kenya-black">Target Classes</label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {classes.map((c) => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => toggleClassSelection(c.name)}
-                              className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
-                                newExam.classes.includes(c.name)
-                                  ? 'bg-kenya-green text-white border-kenya-green'
-                                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-kenya-green/50'
-                              }`}
-                            >
-                              {c.name}
-                            </button>
-                          ))}
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-kenya-black">Target Class</label>
+                          <select 
+                            required
+                            value={newExam.classes[0] || ''}
+                            onChange={(e) => setNewExam({...newExam, classes: [e.target.value]})}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
+                          >
+                            <option value="">Select Class...</option>
+                            {classes.map(c => (
+                              <option key={c.id} value={c.name}>{c.name}</option>
+                            ))}
+                          </select>
                         </div>
-                      </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-kenya-black">Subject (Optional)</label>
+                          <select 
+                            value={newExam.subjects[0] || ''}
+                            onChange={(e) => setNewExam({...newExam, subjects: [e.target.value]})}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
+                          >
+                            <option value="">All Subjects</option>
+                            {learningAreas.map(la => (
+                              <option key={la} value={la}>{la}</option>
+                            ))}
+                          </select>
+                        </div>
 
                       <div className="grid grid-cols-2 gap-6 pt-4">
                         <Button type="button" variant="ghost" onClick={() => setAcademicSubTab('overview')} className="w-full">Cancel</Button>
@@ -4098,7 +4339,7 @@ export const PrincipalDashboard = () => {
                               value={schoolSettings.name}
                               onChange={(e) => setSchoolSettings({...schoolSettings, name: e.target.value})}
                               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
-                              placeholder="e.g. Alakara High School"
+                              placeholder="e.g. Bora School High School"
                             />
                           </div>
                           <div className="space-y-2 col-span-2">

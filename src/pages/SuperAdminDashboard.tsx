@@ -82,12 +82,27 @@ export const SuperAdminDashboard = () => {
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      let profileId = session?.user.id;
+      let profileEmail = session?.user.email;
+
+      // Fallback: Check localStorage if no session
+      if (!profileId) {
+        const savedAdmin = localStorage.getItem('alakara_super_admin');
+        if (savedAdmin) {
+          const adminObj = JSON.parse(savedAdmin);
+          profileEmail = adminObj.email;
+        }
+      }
+
+      if (profileId || profileEmail) {
+        const query = supabase.from('profiles').select('*');
+        if (profileId) {
+          query.eq('id', profileId);
+        } else {
+          query.eq('email', profileEmail).eq('role', 'super-admin');
+        }
+
+        const { data: profile } = await query.single();
         
         if (profile && profile.role === 'super-admin') {
           setAdminProfile(profile);
@@ -182,7 +197,7 @@ export const SuperAdminDashboard = () => {
         id: '1',
         name: 'Dr. Sarah Jenkins',
         role: 'Principal, Oakwood Academy',
-        content: 'Alakara KE has completely transformed how we handle end-of-term examinations. The automated grading alone has saved our teachers hundreds of hours.',
+        content: 'Bora School KE has completely transformed how we handle end-of-term examinations. The automated grading alone has saved our teachers hundreds of hours.',
         image: 'https://picsum.photos/seed/sarah/100/100',
       },
       {
@@ -261,17 +276,36 @@ export const SuperAdminDashboard = () => {
       type: 'Secondary', // Default
       principal_name: 'Principal',
       principal_email: creds.principal
-    }).then(() => {
-      setSchools([school, ...schools]);
-      setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-      setNewSchool({ name: '', location: '', students: '' });
+    }).select().single().then(({ data: schoolData, error: schoolError }) => {
+      if (schoolError) {
+        console.error('Error creating school:', schoolError);
+        alert('Failed to register school in database');
+        return;
+      }
 
-      addNotification({
-        title: 'New School Registered',
-        message: `${school.name} has been successfully registered on the platform.`,
-        type: 'success',
-        role: 'super-admin'
-      });
+      if (schoolData) {
+        // Create principal profile
+        supabase.from('profiles').insert({
+          school_id: schoolData.id,
+          name: `${newSchool.name} Principal`,
+          email: creds.principal,
+          password: creds.pass,
+          role: 'principal'
+        }).then(({ error: profileError }) => {
+          if (profileError) console.error('Error creating principal profile:', profileError);
+          
+          setSchools([school, ...schools]);
+          setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
+          setNewSchool({ name: '', location: '', students: '' });
+
+          addNotification({
+            title: 'New School Registered',
+            message: `${school.name} has been successfully registered on the platform.`,
+            type: 'success',
+            role: 'super-admin'
+          });
+        });
+      }
     });
   };
 
@@ -410,7 +444,7 @@ export const SuperAdminDashboard = () => {
           <div className="bg-kenya-green p-1.5 rounded-lg">
             <GraduationCap className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-bold text-kenya-black tracking-tight">Alakara <span className="text-kenya-red">KE</span></span>
+          <span className="text-xl font-bold text-kenya-black tracking-tight">Bora School <span className="text-kenya-red">KE</span></span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">

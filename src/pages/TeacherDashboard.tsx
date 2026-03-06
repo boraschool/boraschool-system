@@ -107,12 +107,27 @@ export const TeacherDashboard = () => {
   useEffect(() => {
     const fetchTeacherData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      let profileId = session?.user.id;
+      let profileEmail = session?.user.email;
+
+      // Fallback: Check localStorage if no session
+      if (!profileId && currentTeacher) {
+        profileId = currentTeacher.id;
+        profileEmail = currentTeacher.email;
+      }
+
+      if (profileId || profileEmail) {
+        const query = supabase.from('profiles').select('*');
+        if (profileId && !profileId.startsWith('demo-')) {
+          query.eq('id', profileId);
+        } else if (profileEmail) {
+          query.eq('email', profileEmail).eq('role', 'teacher');
+        } else {
+          // If it's a demo teacher and no email, just keep currentTeacher
+          return;
+        }
+
+        const { data: profile } = await query.single();
         
         if (profile) {
           setCurrentTeacher(profile);
@@ -136,6 +151,66 @@ export const TeacherDashboard = () => {
       </div>
     );
   }
+
+  useEffect(() => {
+    const fetchAllData = async () => {
+      if (!currentTeacher?.school_id) return;
+      
+      try {
+        // Fetch Students
+        const { data: studentsData } = await supabase
+          .from('students')
+          .select('*')
+          .eq('school_id', currentTeacher.school_id);
+        if (studentsData) setAllStudents(studentsData);
+
+        // Fetch Classes
+        const { data: classesData } = await supabase
+          .from('classes')
+          .select('*')
+          .eq('school_id', currentTeacher.school_id);
+        if (classesData) setClasses(classesData);
+
+        // Fetch Exams
+        const { data: examsData } = await supabase
+          .from('exams')
+          .select('*')
+          .eq('school_id', currentTeacher.school_id);
+        if (examsData) {
+          setExams(examsData.map(e => ({
+            ...e,
+            schoolId: e.school_id,
+            createdAt: e.created_at,
+            classes: e.class_id ? [e.class_id] : [],
+            subjects: e.subject_id ? [e.subject_id] : [],
+            status: e.locked ? 'Completed' : 'Active',
+            published: e.locked // Assuming locked means published for now
+          })));
+        }
+
+        // Fetch Marks for all exams
+        const { data: marksData } = await supabase
+          .from('marks')
+          .select('*');
+        if (marksData) {
+          setMarks(marksData.map(m => ({
+            id: m.id,
+            examId: m.exam_id,
+            studentId: m.student_id,
+            subject: m.subject_id,
+            score: String(m.score),
+            grade: m.grade || '',
+            updatedAt: m.created_at
+          })));
+        }
+
+      } catch (error) {
+        console.error('Error fetching data from Supabase:', error);
+      }
+    };
+
+    fetchAllData();
+  }, [currentTeacher?.school_id]);
 
   const [classes, setClasses] = useState<any[]>(() => {
     const saved = localStorage.getItem('alakara_classes');
@@ -191,7 +266,7 @@ export const TeacherDashboard = () => {
       fileType: newMaterial.fileType,
       fileName: newMaterial.file.name,
       fileSize: (newMaterial.file.size / 1024).toFixed(1) + ' KB',
-      schoolName: 'Alakara Academy',
+      schoolName: 'Bora School Academy',
       teacherName: currentTeacher.name,
       uploadDate: new Date().toLocaleDateString(),
       status: 'Pending',
@@ -492,19 +567,22 @@ export const TeacherDashboard = () => {
       const supabaseMarks = newMarks
         .filter(m => m.examId === activeExam.id && m.subject === subject)
         .map(m => ({
+          id: m.id || `${activeExam.id}-${m.studentId}-${subject}`,
           exam_id: m.examId,
           student_id: m.studentId,
-          subject_id: m.subject, // Map subject name to subject_id for now
-          score: parseFloat(m.score || m.percentage),
+          subject_id: m.subject,
+          score: parseFloat(String(m.score || m.percentage)),
           grade: m.grade
         }));
-      
-      await supabaseService.upsertMarks(supabaseMarks);
+
+      const { error } = await supabase.from('marks').upsert(supabaseMarks);
+      if (error) throw error;
+
       addLog(isFinal ? 'Submit Marks' : 'Save Draft', `Updated marks for ${activeExam.title} (${subject})`);
-      alert(isFinal ? 'Marks submitted as final!' : 'Draft saved successfully!');
-    } catch (err: any) {
-      console.error('Error saving marks to Supabase:', err);
-      alert('Failed to save marks to cloud. They are saved locally for now.');
+      alert(isFinal ? 'Marks submitted as final!' : 'Marks saved successfully to Supabase!');
+    } catch (error) {
+      console.error('Error saving marks to Supabase:', error);
+      alert('Failed to save marks to Supabase. Please check your connection.');
     }
     
     if (isFinal) {
@@ -767,7 +845,7 @@ export const TeacherDashboard = () => {
               <div className="bg-kenya-green p-2 rounded-lg group-hover:rotate-12 transition-transform">
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight">Alakara <span className="text-kenya-red">Staff</span></span>
+              <span className="text-xl font-bold tracking-tight">Bora School <span className="text-kenya-red">Staff</span></span>
             </div>
             <button 
               className="lg:hidden text-gray-400 hover:text-white"

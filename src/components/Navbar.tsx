@@ -22,7 +22,7 @@ export const Navbar = () => {
             <div className="bg-kenya-green p-2 rounded-lg">
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-kenya-black tracking-tight">Alakara <span className="text-kenya-red">KE</span></span>
+            <span className="text-2xl font-bold text-kenya-black tracking-tight">Bora School <span className="text-kenya-red">KE</span></span>
           </div>
 
           {/* Desktop Nav */}

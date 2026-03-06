@@ -38,12 +38,26 @@ export const StudentDashboard = () => {
   useEffect(() => {
     const fetchStudentData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      let profileId = session?.user.id;
+      let profileEmail = session?.user.email;
+
+      // Fallback: Check localStorage if no session
+      if (!profileId && currentStudent) {
+        profileId = currentStudent.id;
+        profileEmail = currentStudent.email;
+      }
+
+      if (profileId || profileEmail) {
+        const query = supabase.from('profiles').select('*');
+        if (profileId && !profileId.startsWith('demo-')) {
+          query.eq('id', profileId);
+        } else if (profileEmail) {
+          query.eq('email', profileEmail).eq('role', 'student');
+        } else {
+          return;
+        }
+
+        const { data: profile } = await query.single();
         
         if (profile) {
           const { data: studentData } = await supabase
@@ -140,7 +154,7 @@ export const StudentDashboard = () => {
               <div className="bg-white p-2 rounded-xl group-hover:rotate-12 transition-transform">
                 <GraduationCap className="w-8 h-8 text-black" />
               </div>
-              <span className="text-2xl font-black tracking-tighter uppercase italic">Alakara <span className="text-[#FF6321]">Students</span></span>
+              <span className="text-2xl font-black tracking-tighter uppercase italic">Bora School <span className="text-[#FF6321]">Students</span></span>
             </div>
             <button 
               className="lg:hidden text-gray-400 hover:text-white"

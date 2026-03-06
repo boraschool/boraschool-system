@@ -25,10 +25,10 @@ export const Hero = () => {
               The Future of Kenyan School Examinations
             </span>
             <h1 className="text-5xl lg:text-7xl font-bold text-kenya-black tracking-tight leading-[1.1] mb-6">
-              Automate Your Exams with <span className="text-kenya-green">Alakara</span> <span className="text-kenya-red">Innovation</span>
+              Automate Your Exams with <span className="text-kenya-green">Bora School</span> <span className="text-kenya-red">Innovation</span>
             </h1>
             <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-2xl mx-auto">
-              Alakara empowers Kenyan schools with a secure, cloud-based platform to create, manage, and grade exams automatically. Real-time results, deep analytics, and zero paperwork.
+              Bora School empowers Kenyan schools with a secure, cloud-based platform to create, manage, and grade exams automatically. Real-time results, deep analytics, and zero paperwork.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
               <Link to="/register-school">
@@ -51,7 +51,7 @@ export const Hero = () => {
             <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
               <img
                 src="https://picsum.photos/seed/alakara-dash-ke/1200/800"
-                alt="Alakara KE Dashboard Preview"
+                alt="Bora School KE Dashboard Preview"
                 className="w-full h-auto"
                 referrerPolicy="no-referrer"
               />
