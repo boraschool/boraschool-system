@@ -38,9 +38,9 @@ export const Footer = () => {
             <h4 className="text-white font-bold mb-6">Admin</h4>
             <ul className="space-y-4 text-sm">
               <li>
-                <Link to="/principal-login" className="hover:text-white transition-colors flex items-center gap-2">
+                <Link to="/super-admin" className="hover:text-white transition-colors flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" />
-                  Principal Portal
+                  Super Admin Login
                 </Link>
               </li>
               <li>

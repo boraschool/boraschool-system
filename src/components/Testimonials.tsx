@@ -1,23 +1,19 @@
 import { Star } from 'lucide-react';
-import { useState, useEffect } from 'react';
 
-const defaultTestimonials = [
+const testimonials = [
   {
-    id: '1',
     name: 'Dr. Sarah Jenkins',
     role: 'Principal, Oakwood Academy',
     content: 'Alakara KE has completely transformed how we handle end-of-term examinations. The automated grading alone has saved our teachers hundreds of hours.',
     image: 'https://picsum.photos/seed/sarah/100/100',
   },
   {
-    id: '2',
     name: 'Mark Thompson',
     role: 'Exam Officer, City High School',
     content: 'The real-time analytics provide insights we never had before. We can now identify struggling students instantly and provide targeted support.',
     image: 'https://picsum.photos/seed/mark/100/100',
   },
   {
-    id: '3',
     name: 'Linda Chen',
     role: 'IT Director, Global International',
     content: 'Integration was seamless. The Supabase-backed infrastructure gives us peace of mind regarding data security and system reliability.',
@@ -26,15 +22,6 @@ const defaultTestimonials = [
 ];
 
 export const Testimonials = () => {
-  const [testimonials, setTestimonials] = useState(defaultTestimonials);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('alakara_success_stories');
-    if (saved) {
-      setTestimonials(JSON.parse(saved));
-    }
-  }, []);
-
   return (
     <section id="testimonials" className="py-24 bg-gray-50 relative">
       <div className="absolute inset-0 opacity-[0.01] pointer-events-none" style={{ backgroundImage: 'var(--background-kenya-pattern)', backgroundSize: '80px 80px' }} />
@@ -45,8 +32,8 @@ export const Testimonials = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map((t: any) => (
-            <div key={t.id || t.name} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          {testimonials.map((t) => (
+            <div key={t.name} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex gap-1 mb-6">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="w-4 h-4 fill-kenya-red text-kenya-red" />
@@ -55,7 +42,7 @@ export const Testimonials = () => {
               <p className="text-gray-600 italic mb-8 leading-relaxed">"{t.content}"</p>
               <div className="flex items-center gap-4">
                 <img
-                  src={t.image || `https://picsum.photos/seed/${t.name}/100/100`}
+                  src={t.image}
                   alt={t.name}
                   className="w-12 h-12 rounded-full object-cover"
                   referrerPolicy="no-referrer"
