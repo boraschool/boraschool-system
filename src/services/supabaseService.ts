@@ -13,11 +13,31 @@ export const supabaseService = {
     return data;
   },
 
-  async updateProfile(id: string, updates: Database['public']['Tables']['profiles']['Update']) {
+  async getClasses(schoolId: string) {
+    const { data, error } = await supabase
+      .from('classes')
+      .select('*')
+      .eq('school_id', schoolId);
+    if (error) throw error;
+    return data;
+  },
+
+  async getMarksByStudent(studentId: string) {
+    const { data, error } = await supabase
+      .from('marks')
+      .select('*, exams(*)')
+      .eq('student_id', studentId);
+    if (error) throw error;
+    return data;
+  },
+
+  async updateProfile(id: string, updates: any) {
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
-      .eq('id', id);
+      .eq('id', id)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -77,6 +97,35 @@ export const supabaseService = {
       .eq('school_id', schoolId);
     if (error) throw error;
     return data;
+  },
+
+  async createStudent(student: Database['public']['Tables']['students']['Insert']) {
+    const { data, error } = await supabase
+      .from('students')
+      .insert(student)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateStudent(id: string, updates: Database['public']['Tables']['students']['Update']) {
+    const { data, error } = await supabase
+      .from('students')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteStudent(id: string) {
+    const { error } = await supabase
+      .from('students')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
   },
 
   async getStudentsByClass(schoolId: string, className: string) {
@@ -170,11 +219,126 @@ export const supabaseService = {
     return publicUrl;
   },
 
+  async uploadResource(file: File) {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const { data, error } = await supabase.storage
+      .from('public-resources')
+      .upload(fileName, file, { upsert: true });
+    if (error) throw error;
+    return { data, fileName };
+  },
+
+  // Success Stories
+  async getSuccessStories() {
+    const { data, error } = await supabase
+      .from('success_stories')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async createSuccessStory(story: Database['public']['Tables']['success_stories']['Insert']) {
+    const { data, error } = await supabase
+      .from('success_stories')
+      .insert(story)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteSuccessStory(id: string) {
+    const { error } = await supabase
+      .from('success_stories')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // Exam Materials
+  async getExamMaterials(status?: string) {
+    let query = supabase.from('exam_materials').select('*');
+    if (status) query = query.eq('status', status);
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async createExamMaterial(material: Database['public']['Tables']['exam_materials']['Insert']) {
+    const { data, error } = await supabase
+      .from('exam_materials')
+      .insert(material)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateExamMaterial(id: string, updates: Database['public']['Tables']['exam_materials']['Update']) {
+    const { data, error } = await supabase
+      .from('exam_materials')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteExamMaterial(id: string) {
+    const { error } = await supabase
+      .from('exam_materials')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // Staff
+  async getStaff(schoolId: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('school_id', schoolId)
+      .eq('role', 'teacher');
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteStaff(id: string) {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   // Super Admin
   async getAllSchools() {
     const { data, error } = await supabase
       .from('schools')
       .select('*');
+    if (error) throw error;
+    return data;
+  },
+
+  async createSchool(school: Database['public']['Tables']['schools']['Insert']) {
+    const { data, error } = await supabase
+      .from('schools')
+      .insert(school)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async createProfile(profile: Database['public']['Tables']['profiles']['Insert']) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert(profile)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   }

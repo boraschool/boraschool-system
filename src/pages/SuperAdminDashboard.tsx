@@ -80,6 +80,54 @@ export const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schools' | 'analytics' | 'exams' | 'stories'>('dashboard');
 
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [schoolsData, storiesData, materialsData] = await Promise.all([
+          supabaseService.getAllSchools(),
+          supabaseService.getSuccessStories(),
+          supabaseService.getExamMaterials()
+        ]);
+
+        if (schoolsData) {
+          const mappedSchools: School[] = schoolsData.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            location: s.location,
+            students: '0',
+            status: 'Active',
+            date: new Date(s.created_at).toLocaleDateString(),
+            principalEmail: s.principal_email,
+            principalPass: '********',
+            teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
+            teacherPass: '********'
+          }));
+          setSchools(mappedSchools);
+        }
+
+        if (storiesData) {
+          setSuccessStories(storiesData);
+        }
+
+        if (materialsData) {
+          const mappedMaterials: ExamMaterial[] = materialsData.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            subject: m.subject,
+            fileType: m.file_type,
+            schoolName: m.school_name,
+            teacherName: m.teacher_name,
+            uploadDate: new Date(m.created_at).toLocaleDateString(),
+            status: m.status,
+            visibility: m.visibility,
+            fileUrl: m.file_url
+          }));
+          setExamMaterials(mappedMaterials);
+        }
+      } catch (err) {
+        console.error('Error loading super admin data:', err);
+      }
+    };
+
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       let profileId = session?.user.id;
@@ -106,38 +154,15 @@ export const SuperAdminDashboard = () => {
         
         if (profile && profile.role === 'super-admin') {
           setAdminProfile(profile);
-          loadSchools();
+          loadData();
         } else {
           navigate('/super-admin');
         }
       } else {
         // Fallback for mock login if no session
         const isMockLoggedIn = true; // For now assume mock login works if navigated here
-        if (isMockLoggedIn) loadSchools();
+        if (isMockLoggedIn) loadData();
         else navigate('/super-admin');
-      }
-    };
-
-    const loadSchools = async () => {
-      try {
-        const data = await supabaseService.getAllSchools();
-        if (data) {
-          const mappedSchools: School[] = data.map((s: any) => ({
-            id: s.id,
-            name: s.name,
-            location: s.location,
-            students: '0', // This would need a count query in a real app
-            status: 'Active', // Default status
-            date: new Date(s.created_at).toLocaleDateString(),
-            principalEmail: s.principal_email,
-            principalPass: '********', // Don't show real passwords
-            teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
-            teacherPass: '********'
-          }));
-          setSchools(mappedSchools);
-        }
-      } catch (err) {
-        console.error('Error loading schools:', err);
       }
     };
 
@@ -149,73 +174,8 @@ export const SuperAdminDashboard = () => {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Suspended'>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [examMaterials, setExamMaterials] = useState<ExamMaterial[]>(() => {
-    const saved = localStorage.getItem('alakara_exam_materials');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'm1',
-        title: 'KCSE Mathematics Mock 2026',
-        subject: 'Mathematics',
-        schoolName: 'Oakwood Academy',
-        teacherName: 'Mr. Kamau',
-        uploadDate: '2 hours ago',
-        status: 'Pending',
-        fileType: 'PDF',
-        visibility: 'Public'
-      },
-      {
-        id: 'm2',
-        title: 'English Literature Analysis - Blossoms',
-        subject: 'English',
-        schoolName: 'City High School',
-        teacherName: 'Mrs. Anyango',
-        uploadDate: '5 hours ago',
-        status: 'Pending',
-        fileType: 'PDF',
-        visibility: 'Public'
-      },
-      {
-        id: 'm3',
-        title: 'Biology Practical Guide - Form 4',
-        subject: 'Biology',
-        schoolName: 'Global International',
-        teacherName: 'Dr. Omondi',
-        uploadDate: '1 day ago',
-        status: 'Approved',
-        fileType: 'ZIP',
-        visibility: 'Public'
-      }
-    ];
-  });
-
-  const [successStories, setSuccessStories] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_success_stories');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: '1',
-        name: 'Dr. Sarah Jenkins',
-        role: 'Principal, Oakwood Academy',
-        content: 'Bora School KE has completely transformed how we handle end-of-term examinations. The automated grading alone has saved our teachers hundreds of hours.',
-        image: 'https://picsum.photos/seed/sarah/100/100',
-      },
-      {
-        id: '2',
-        name: 'Mark Thompson',
-        role: 'Exam Officer, City High School',
-        content: 'The real-time analytics provide insights we never had before. We can now identify struggling students instantly and provide targeted support.',
-        image: 'https://picsum.photos/seed/mark/100/100',
-      },
-      {
-        id: '3',
-        name: 'Linda Chen',
-        role: 'IT Director, Global International',
-        content: 'Integration was seamless. The Supabase-backed infrastructure gives us peace of mind regarding data security and system reliability.',
-        image: 'https://picsum.photos/seed/linda/100/100',
-      },
-    ];
-  });
+  const [examMaterials, setExamMaterials] = useState<ExamMaterial[]>([]);
+  const [successStories, setSuccessStories] = useState<any[]>([]);
 
   useEffect(() => {
     localStorage.setItem('alakara_success_stories', JSON.stringify(successStories));
@@ -249,81 +209,97 @@ export const SuperAdminDashboard = () => {
     };
   };
 
-  const handleAddSchool = (e: FormEvent) => {
+  const handleAddSchool = async (e: FormEvent) => {
     e.preventDefault();
     const creds = generateCredentials(newSchool.name);
     
-    const defaultExpiry = new Date();
-    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
-    const expiryStr = defaultExpiry.toISOString().split('T')[0];
-
-    const school: School = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...newSchool,
-      status: 'Active',
-      date: 'Just now',
-      principalEmail: creds.principal,
-      principalPass: creds.pass,
-      teacherEmail: creds.teacher,
-      teacherPass: creds.pass,
-      subscriptionExpiresAt: expiryStr
-    };
-
-    // Save to Supabase
-    supabase.from('schools').insert({
-      name: newSchool.name,
-      location: newSchool.location,
-      type: 'Secondary', // Default
-      principal_name: 'Principal',
-      principal_email: creds.principal
-    }).select().single().then(({ data: schoolData, error: schoolError }) => {
-      if (schoolError) {
-        console.error('Error creating school:', schoolError);
-        alert('Failed to register school in database');
-        return;
-      }
+    try {
+      const schoolData = await supabaseService.createSchool({
+        name: newSchool.name,
+        location: newSchool.location,
+        type: 'Secondary',
+        principal_name: 'Principal',
+        principal_email: creds.principal
+      });
 
       if (schoolData) {
-        // Create principal profile
-        supabase.from('profiles').insert({
+        await supabaseService.createProfile({
           school_id: schoolData.id,
           name: `${newSchool.name} Principal`,
           email: creds.principal,
           password: creds.pass,
           role: 'principal'
-        }).then(({ error: profileError }) => {
-          if (profileError) console.error('Error creating principal profile:', profileError);
-          
-          setSchools([school, ...schools]);
-          setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-          setNewSchool({ name: '', location: '', students: '' });
+        });
 
-          addNotification({
-            title: 'New School Registered',
-            message: `${school.name} has been successfully registered on the platform.`,
-            type: 'success',
-            role: 'super-admin'
-          });
+        const newSchoolObj: School = {
+          id: schoolData.id,
+          name: newSchool.name,
+          location: newSchool.location,
+          students: '0',
+          status: 'Active',
+          date: new Date().toLocaleDateString(),
+          principalEmail: creds.principal,
+          principalPass: creds.pass,
+          teacherEmail: creds.teacher,
+          teacherPass: creds.pass
+        };
+
+        setSchools([newSchoolObj, ...schools]);
+        setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
+        setNewSchool({ name: '', location: '', students: '' });
+
+        addNotification({
+          title: 'New School Registered',
+          message: `${newSchool.name} has been successfully registered.`,
+          type: 'success',
+          role: 'super-admin'
         });
       }
-    });
+    } catch (err) {
+      console.error('Error adding school:', err);
+      alert('Failed to register school');
+    }
   };
 
-  const handleAddStory = (e: FormEvent) => {
+  const handleAddStory = async (e: FormEvent) => {
     e.preventDefault();
-    const story = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...newStory,
-      image: `https://picsum.photos/seed/${newStory.name}/100/100`
-    };
-    setSuccessStories([story, ...successStories]);
-    setNewStory({ name: '', role: '', content: '' });
-    setShowStoryModal(false);
+    try {
+      const storyData = await supabaseService.createSuccessStory({
+        name: newStory.name,
+        role: newStory.role,
+        content: newStory.content,
+        image_url: `https://picsum.photos/seed/${newStory.name}/100/100`
+      });
+
+      if (storyData) {
+        setSuccessStories([storyData, ...successStories]);
+        setNewStory({ name: '', role: '', content: '' });
+        setShowStoryModal(false);
+      }
+    } catch (err) {
+      console.error('Error adding story:', err);
+    }
   };
 
-  const handleDeleteStory = (id: string) => {
+  const handleDeleteStory = async (id: string) => {
     if (window.confirm('Delete this success story?')) {
-      setSuccessStories(successStories.filter(s => s.id !== id));
+      try {
+        await supabaseService.deleteSuccessStory(id);
+        setSuccessStories(successStories.filter(s => s.id !== id));
+      } catch (err) {
+        console.error('Error deleting story:', err);
+      }
+    }
+  };
+
+  const handleUpdateMaterialStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+    try {
+      const updated = await supabaseService.updateExamMaterial(id, { status });
+      if (updated) {
+        setExamMaterials(examMaterials.map(m => m.id === id ? { ...m, status } : m));
+      }
+    } catch (err) {
+      console.error('Error updating material status:', err);
     }
   };
 
@@ -366,19 +342,17 @@ export const SuperAdminDashboard = () => {
     }));
   };
 
-  const handleMaterialAction = (id: string, action: 'Approved' | 'Rejected') => {
-    setExamMaterials(examMaterials.map(m => {
-      if (m.id === id) {
-        addNotification({
-          title: `Material ${action}`,
-          message: `The material "${m.title}" has been ${action.toLowerCase()}.`,
-          type: action === 'Approved' ? 'success' : 'error',
-          role: 'super-admin'
-        });
-        return { ...m, status: action };
-      }
-      return m;
-    }));
+  const handleMaterialAction = async (id: string, action: 'Approved' | 'Rejected') => {
+    await handleUpdateMaterialStatus(id, action);
+    const material = examMaterials.find(m => m.id === id);
+    if (material) {
+      addNotification({
+        title: `Material ${action}`,
+        message: `The material "${material.title}" has been ${action.toLowerCase()}.`,
+        type: action === 'Approved' ? 'success' : 'error',
+        role: 'super-admin'
+      });
+    }
   };
 
   const toggleMaterialVisibility = (id: string) => {

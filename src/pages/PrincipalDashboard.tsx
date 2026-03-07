@@ -83,6 +83,54 @@ export const PrincipalDashboard = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
+  const [staff, setStaff] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [marks, setMarks] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!school?.id) return;
+      
+      try {
+        const [staffData, studentsData, examsData, classesData, settingsData, marksData] = await Promise.all([
+          supabaseService.getStaff(school.id),
+          supabaseService.getStudents(school.id),
+          supabaseService.getExams(school.id),
+          supabaseService.getClasses(school.id),
+          supabaseService.getSchoolSettings(school.id),
+          supabase.from('marks').select('*')
+        ]);
+
+        if (staffData) {
+          const mappedStaff = staffData.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            role: s.role === 'principal' ? 'Principal' : 'Teacher',
+            username: s.email,
+            password: s.password,
+            assignedSubjects: s.assigned_subjects || [],
+            assignedClasses: s.assigned_classes || []
+          }));
+          setStaff(mappedStaff);
+        }
+
+        if (studentsData) setStudents(studentsData);
+        if (examsData) setExams(examsData);
+        if (classesData) setClasses(classesData);
+        if (settingsData) setSettings(settingsData);
+        if (marksData.data) setMarks(marksData.data);
+      } catch (err) {
+        console.error('Error loading principal data:', err);
+      }
+    };
+
+    loadData();
+  }, [school?.id]);
+
   useEffect(() => {
     const fetchSchoolData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -679,33 +727,9 @@ export const PrincipalDashboard = () => {
     });
   };
 
-  const [students, setStudents] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_students');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', name: 'Alice Wanjiku', adm: 'ADM-2024-001', class: 'Form 1', status: 'Active', gender: 'Female', profile_image: null },
-      { id: '2', name: 'Bob Otieno', adm: 'ADM-2024-002', class: 'Form 2', status: 'Active', gender: 'Male', profile_image: null },
-      { id: '3', name: 'Charlie Musyoka', adm: 'ADM-2024-003', class: 'Form 1', status: 'Active', gender: 'Male', profile_image: null },
-      { id: '4', name: 'Diana Kwamboka', adm: 'ADM-2024-004', class: 'Grade 7', status: 'Active', gender: 'Female', profile_image: null },
-      { id: '5', name: 'Evans Kiprop', adm: 'ADM-2024-005', class: 'Grade 7', status: 'Active', gender: 'Male', profile_image: null },
-    ];
-  });
-
   const [newStudent, setNewStudent] = useState({ name: '', adm: '', class: 'Form 1', streamId: '', gender: 'Male', profile_image: null as string | null });
   const [editingStudent, setEditingStudent] = useState<any>(null);
 
-  const [classes, setClasses] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_classes');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', name: 'Form 1', teacherId: '1', capacity: 40 },
-      { id: '2', name: 'Form 2', teacherId: '2', capacity: 40 },
-      { id: '3', name: 'Form 3', teacherId: '3', capacity: 40 },
-      { id: '4', name: 'Form 4', teacherId: '', capacity: 40 },
-      { id: '5', name: 'Grade 7', teacherId: '', capacity: 40 },
-      { id: '6', name: 'Grade 8', teacherId: '', capacity: 40 },
-    ];
-  });
   const [newClass, setNewClass] = useState({ name: '', teacherId: '', capacity: 40, streams: [] as string[] });
   const [editingClass, setEditingClass] = useState<any>(null);
 
@@ -717,17 +741,6 @@ export const PrincipalDashboard = () => {
   const [studentSortOrder, setStudentSortOrder] = useState<'asc' | 'desc'>('asc');
   const [viewingSubjectChampions, setViewingSubjectChampions] = useState<string | null>(null);
   const [selectedClassFilter, setSelectedClassFilter] = useState('All');
-  const [marks, setMarks] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_marks');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: 'm1', examId: 'exam-1', studentId: '1', subject: 'Mathematics', score: '85', total: 85, grade: 'A', points: 12 },
-      { id: 'm2', examId: 'exam-1', studentId: '1', subject: 'English', score: '78', total: 78, grade: 'A-', points: 11 },
-      { id: 'm3', examId: 'exam-1', studentId: '3', subject: 'Mathematics', score: '92', total: 92, grade: 'A', points: 12 },
-      { id: 'm4', examId: 'exam-1', studentId: '3', subject: 'English', score: '65', total: 65, grade: 'B', points: 9 },
-      { id: 'm5', examId: 'exam-1', studentId: '4', subject: 'Mathematics', score: '70', total: 70, grade: 'B+', points: 10 },
-    ];
-  });
   const [showEditMarksModal, setShowEditMarksModal] = useState(false);
   const [selectedMarksStudent, setSelectedMarksStudent] = useState<any>(null);
   const [editingMarks, setEditingMarks] = useState<any>({}); // {examId: score}
@@ -739,24 +752,6 @@ export const PrincipalDashboard = () => {
   useEffect(() => {
     localStorage.setItem('alakara_students', JSON.stringify(students));
   }, [students]);
-  const [exams, setExams] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_exams');
-    if (saved) return JSON.parse(saved);
-    return [
-      { 
-        id: 'exam-1', 
-        title: 'End of Term 1 Assessment', 
-        term: 'Term 1', 
-        year: '2026', 
-        classes: ['Form 1', 'Form 2', 'Grade 7'], 
-        subjects: ['Mathematics', 'English', 'Kiswahili', 'Science'],
-        status: 'Active',
-        published: false,
-        createdAt: new Date().toISOString()
-      }
-    ];
-  });
-
   const [newExam, setNewExam] = useState({
     title: '',
     term: 'Term 1',
@@ -873,41 +868,6 @@ export const PrincipalDashboard = () => {
   useEffect(() => {
     localStorage.setItem('alakara_streams', JSON.stringify(streams));
   }, [streams]);
-
-  const [staff, setStaff] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_staff');
-    if (saved) return JSON.parse(saved);
-    return [
-      { 
-        id: '1', 
-        name: 'John Kamau', 
-        email: 'j.kamau@alakara.ac.ke', 
-        role: 'Head of Science', 
-        status: 'Active', 
-        username: 'j.kamau@alakara.ac.ke', 
-        password: 'password123', 
-        mustChangePassword: true, 
-        assignments: [
-          { classId: '1', streamId: 's1', subject: 'Science' },
-          { classId: '5', streamId: '', subject: 'Science' }
-        ]
-      },
-      { 
-        id: '2', 
-        name: 'Sarah Anyango', 
-        email: 's.anyango@alakara.ac.ke', 
-        role: 'Mathematics Teacher', 
-        status: 'Active', 
-        username: 's.anyango@alakara.ac.ke', 
-        password: 'password123', 
-        mustChangePassword: true, 
-        assignments: [
-          { classId: '1', streamId: 's1', subject: 'Mathematics' },
-          { classId: '1', streamId: 's2', subject: 'Mathematics' }
-        ]
-      },
-    ];
-  });
 
   const [newStaff, setNewStaff] = useState({ 
     name: '', 
@@ -1124,9 +1084,15 @@ export const PrincipalDashboard = () => {
     setShowAddStaffModal(true);
   };
 
-  const removeStaff = (id: string) => {
+  const removeStaff = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this staff member?')) {
-      setStaff(staff.filter(s => s.id !== id));
+      try {
+        await supabaseService.deleteStaff(id);
+        setStaff(staff.filter(s => s.id !== id));
+      } catch (err) {
+        console.error('Error removing staff:', err);
+        alert('Failed to remove staff member from database.');
+      }
     }
   };
 

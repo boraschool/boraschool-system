@@ -152,30 +152,24 @@ export const TeacherDashboard = () => {
     );
   }
 
+  const [examMaterials, setExamMaterials] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     const fetchAllData = async () => {
       if (!currentTeacher?.school_id) return;
       
       try {
-        // Fetch Students
-        const { data: studentsData } = await supabase
-          .from('students')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
-        if (studentsData) setAllStudents(studentsData);
+        setIsLoading(true);
+        const [examsData, studentsData, materialsData, marksData, classesData] = await Promise.all([
+          supabaseService.getExams(currentTeacher.school_id),
+          supabaseService.getStudents(currentTeacher.school_id),
+          supabaseService.getExamMaterials(),
+          supabase.from('marks').select('*'),
+          supabaseService.getClasses(currentTeacher.school_id)
+        ]);
 
-        // Fetch Classes
-        const { data: classesData } = await supabase
-          .from('classes')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
-        if (classesData) setClasses(classesData);
-
-        // Fetch Exams
-        const { data: examsData } = await supabase
-          .from('exams')
-          .select('*')
-          .eq('school_id', currentTeacher.school_id);
         if (examsData) {
           setExams(examsData.map(e => ({
             ...e,
@@ -184,16 +178,31 @@ export const TeacherDashboard = () => {
             classes: e.class_id ? [e.class_id] : [],
             subjects: e.subject_id ? [e.subject_id] : [],
             status: e.locked ? 'Completed' : 'Active',
-            published: e.locked // Assuming locked means published for now
+            published: e.locked
           })));
         }
 
-        // Fetch Marks for all exams
-        const { data: marksData } = await supabase
-          .from('marks')
-          .select('*');
-        if (marksData) {
-          setMarks(marksData.map(m => ({
+        if (studentsData) setAllStudents(studentsData);
+        if (classesData) setClasses(classesData);
+        
+        if (materialsData) {
+          const mappedMaterials = materialsData.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            subject: m.subject,
+            fileType: m.file_type,
+            schoolName: m.school_name,
+            teacherName: m.teacher_name,
+            uploadDate: new Date(m.created_at).toLocaleDateString(),
+            status: m.status,
+            visibility: m.visibility,
+            fileUrl: m.file_url
+          }));
+          setExamMaterials(mappedMaterials);
+        }
+
+        if (marksData.data) {
+          setMarks(marksData.data.map((m: any) => ({
             id: m.id,
             examId: m.exam_id,
             studentId: m.student_id,
@@ -206,6 +215,8 @@ export const TeacherDashboard = () => {
 
       } catch (error) {
         console.error('Error fetching data from Supabase:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -236,11 +247,6 @@ export const TeacherDashboard = () => {
     ];
   });
 
-  const [examMaterials, setExamMaterials] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_exam_materials');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
   const [newMaterial, setNewMaterial] = useState({
     title: '',
@@ -253,34 +259,63 @@ export const TeacherDashboard = () => {
     localStorage.setItem('alakara_exam_materials', JSON.stringify(examMaterials));
   }, [examMaterials]);
 
-  const handleAddMaterial = (e: FormEvent) => {
+  const handleAddMaterial = async (e: FormEvent) => {
     e.preventDefault();
     if (!newMaterial.file) {
       alert('Please select a file to upload.');
       return;
     }
-    const material = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newMaterial.title,
-      subject: newMaterial.subject,
-      fileType: newMaterial.fileType,
-      fileName: newMaterial.file.name,
-      fileSize: (newMaterial.file.size / 1024).toFixed(1) + ' KB',
-      schoolName: 'Bora School Academy',
-      teacherName: currentTeacher.name,
-      uploadDate: new Date().toLocaleDateString(),
-      status: 'Pending',
-      visibility: 'Public'
-    };
-    setExamMaterials([material, ...examMaterials]);
-    setShowAddMaterialModal(false);
-    setNewMaterial({ title: '', subject: 'Mathematics', fileType: 'PDF', file: null });
-    alert('Material uploaded and sent for approval!');
+
+    try {
+      setIsLoading(true);
+      const { fileName } = await supabaseService.uploadResource(newMaterial.file);
+      const fileUrl = await supabaseService.getResourceUrl(fileName);
+
+      const materialData = await supabaseService.createExamMaterial({
+        title: newMaterial.title,
+        subject: newMaterial.subject,
+        file_type: newMaterial.fileType,
+        file_url: fileUrl,
+        school_name: 'Bora School Academy', // Should be dynamic
+        teacher_name: currentTeacher.name,
+        status: 'Pending',
+        visibility: 'Public'
+      });
+
+      if (materialData) {
+        const mappedMaterial = {
+          id: materialData.id,
+          title: materialData.title,
+          subject: materialData.subject,
+          fileType: materialData.file_type,
+          schoolName: materialData.school_name,
+          teacherName: materialData.teacher_name,
+          uploadDate: new Date(materialData.created_at).toLocaleDateString(),
+          status: materialData.status,
+          visibility: materialData.visibility,
+          fileUrl: materialData.file_url
+        };
+        setExamMaterials([mappedMaterial, ...examMaterials]);
+        setShowAddMaterialModal(false);
+        setNewMaterial({ title: '', subject: 'Mathematics', fileType: 'PDF', file: null });
+        alert('Material uploaded and sent for approval!');
+      }
+    } catch (err) {
+      console.error('Error uploading material:', err);
+      alert('Failed to upload material');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deleteMaterial = (id: string) => {
+  const deleteMaterial = async (id: string) => {
     if (window.confirm('Delete this material?')) {
-      setExamMaterials(examMaterials.filter(m => m.id !== id));
+      try {
+        await supabaseService.deleteExamMaterial(id);
+        setExamMaterials(examMaterials.filter(m => m.id !== id));
+      } catch (err) {
+        console.error('Error deleting material:', err);
+      }
     }
   };
 
@@ -326,19 +361,6 @@ export const TeacherDashboard = () => {
       { grade: 'D', min: 35, max: 39, points: 3 },
       { grade: 'D-', min: 30, max: 34, points: 2 },
       { grade: 'E', min: 0, max: 29, points: 1 },
-    ];
-  });
-
-  // Load students from localStorage if available
-  const [allStudents, setAllStudents] = useState<any[]>(() => {
-    const saved = localStorage.getItem('alakara_students');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: 'S1', name: 'Alice Wanjiku', adm: 'ADM-2024-001', class: 'Form 1', streamId: 's1' },
-      { id: 'S2', name: 'Bob Otieno', adm: 'ADM-2024-002', class: 'Form 2', streamId: 's3' },
-      { id: 'S3', name: 'Charlie Mutua', adm: 'ADM-2024-003', class: 'Form 1', streamId: 's2' },
-      { id: 'S4', name: 'Diana Anyango', adm: 'ADM-2024-004', class: 'Form 2', streamId: 's4' },
-      { id: 'S5', name: 'Evans Kiprop', adm: 'ADM-2024-005', class: 'Form 1', streamId: 's1' },
     ];
   });
 

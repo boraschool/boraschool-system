@@ -19,6 +19,7 @@ import { NotificationBell } from '../components/NotificationBell';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
+import { supabaseService } from '../services/supabaseService';
 
 export const StudentDashboard = () => {
   const navigate = useNavigate();
@@ -90,37 +91,51 @@ export const StudentDashboard = () => {
   }
 
   useEffect(() => {
-    const loadData = () => {
-      const savedMaterials = localStorage.getItem('alakara_exam_materials');
-      if (savedMaterials) {
-        const allMaterials = JSON.parse(savedMaterials);
-        setMaterials(allMaterials.filter((m: any) => m.status === 'Approved' && m.visibility === 'Public'));
-      }
+    const loadData = async () => {
+      try {
+        const [materialsData, examsData, marksData, staffData] = await Promise.all([
+          supabaseService.getExamMaterials('Approved'),
+          supabaseService.getExams(currentStudent.school_id),
+          supabaseService.getMarksByStudent(currentStudent.id),
+          supabaseService.getStaff(currentStudent.school_id)
+        ]);
 
-      const savedExams = localStorage.getItem('alakara_exams');
-      if (savedExams) {
-        setExams(JSON.parse(savedExams).filter((e: any) => e.published && e.classes.includes(currentStudent.class)));
-      }
+        if (materialsData) {
+          const mapped = materialsData
+            .filter((m: any) => m.visibility === 'Public')
+            .map((m: any) => ({
+              id: m.id,
+              title: m.title,
+              subject: m.subject,
+              fileType: m.file_type,
+              uploadDate: new Date(m.created_at).toLocaleDateString(),
+              teacherName: m.teacher_name,
+              schoolName: m.school_name,
+              fileUrl: m.file_url
+            }));
+          setMaterials(mapped);
+        }
 
-      const savedMarks = localStorage.getItem('alakara_marks');
-      if (savedMarks) {
-        const allExams = JSON.parse(localStorage.getItem('alakara_exams') || '[]');
-        setMarks(JSON.parse(savedMarks).filter((m: any) => {
-          const exam = allExams.find((e: any) => e.id === m.examId);
-          return m.studentId === currentStudent.id && exam?.published;
-        }));
-      }
+        if (examsData) {
+          setExams(examsData.filter((e: any) => e.published && e.classes.includes(currentStudent.class)));
+        }
 
-      const savedStaff = localStorage.getItem('alakara_staff');
-      if (savedStaff) {
-        setStaff(JSON.parse(savedStaff));
+        if (marksData) {
+          setMarks(marksData);
+        }
+
+        if (staffData) {
+          setStaff(staffData);
+        }
+      } catch (err) {
+        console.error('Error loading student data:', err);
       }
     };
 
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(loadData, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [currentStudent.id, currentStudent.school_id, currentStudent.class]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
