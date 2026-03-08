@@ -64,6 +64,7 @@ export const SuperAdminLogin = () => {
             });
             
             if (!insertError) {
+              localStorage.setItem('alakara_super_admin', JSON.stringify({ id: data.user.id, email: username.toLowerCase(), role: 'super-admin', name: 'Solomon Isiya' }));
               navigate('/super-admin/dashboard');
               return;
             }
@@ -73,15 +74,18 @@ export const SuperAdminLogin = () => {
           throw new Error('Unauthorized access. Only super admins can log in here.');
         }
 
+        localStorage.setItem('alakara_super_admin', JSON.stringify(profile));
         navigate('/super-admin/dashboard');
         return;
       }
 
       // 2. Fallback to hardcoded for prototype if Supabase fails or user not found
       if (username === 'admin' && password === 'admin123') {
+        localStorage.setItem('alakara_super_admin', JSON.stringify({ id: 'admin-mock', email: 'admin@boraschool.ac.ke', role: 'super-admin', name: 'System Admin' }));
         navigate('/super-admin/dashboard');
       } else if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' && password === 'Godalways@95') {
         // This is the requested super admin
+        localStorage.setItem('alakara_super_admin', JSON.stringify({ id: 'solomon-mock', email: username.toLowerCase(), role: 'super-admin', name: 'Solomon Isiya' }));
         navigate('/super-admin/dashboard');
       } else {
         setError(authError?.message || 'Invalid operator ID or access key');

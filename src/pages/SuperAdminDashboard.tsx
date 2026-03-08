@@ -78,6 +78,7 @@ import { supabaseService } from '../services/supabaseService';
 export const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const [adminProfile, setAdminProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schools' | 'analytics' | 'exams' | 'stories'>('dashboard');
 
   useEffect(() => {
@@ -132,49 +133,61 @@ export const SuperAdminDashboard = () => {
         }
       } catch (err) {
         console.error('Error loading super admin data:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      let profileId = session?.user.id;
-      let profileEmail = session?.user.email;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        let profileId = session?.user.id;
+        let profileEmail = session?.user.email;
 
-      // Fallback: Check localStorage if no session
-      if (!profileId) {
-        const savedAdmin = localStorage.getItem('alakara_super_admin');
-        if (savedAdmin) {
-          const adminObj = JSON.parse(savedAdmin);
-          profileEmail = adminObj.email;
-        }
-      }
-
-      if (profileId || profileEmail) {
-        const query = supabase.from('profiles').select('*');
-        if (profileId) {
-          query.eq('id', profileId);
-        } else {
-          query.eq('email', profileEmail).eq('role', 'super-admin');
+        // Fallback: Check localStorage if no session
+        if (!profileId) {
+          const savedAdmin = localStorage.getItem('alakara_super_admin');
+          if (savedAdmin) {
+            const adminObj = JSON.parse(savedAdmin);
+            profileEmail = adminObj.email;
+            profileId = adminObj.id;
+          }
         }
 
-        const { data: profile } = await query.single();
-        
-        if (profile && profile.role === 'super-admin') {
-          setAdminProfile(profile);
-          loadData();
+        if (profileId || profileEmail) {
+          // If we have a mock ID or email, check profiles table
+          const query = supabase.from('profiles').select('*');
+          if (profileId && !profileId.toString().includes('mock')) {
+            query.eq('id', profileId);
+          } else if (profileEmail) {
+            query.eq('email', profileEmail).eq('role', 'super-admin');
+          }
+
+          const { data: profile, error } = await query.single();
+          
+          if (profile && profile.role === 'super-admin') {
+            setAdminProfile(profile);
+            await loadData();
+          } else if (profileEmail && (profileEmail.toLowerCase() === 'bahatisolomon.bs@gmail.com' || profileEmail === 'admin@boraschool.ac.ke')) {
+            // Special fallback for the super admin email if profile query fails
+            setAdminProfile({ email: profileEmail, role: 'super-admin', name: 'Super Admin' });
+            await loadData();
+          } else {
+            console.warn('Unauthorized super admin access attempt');
+            navigate('/super-admin');
+          }
         } else {
           navigate('/super-admin');
         }
-      } else {
-        // Fallback for mock login if no session
-        const isMockLoggedIn = true; // For now assume mock login works if navigated here
-        if (isMockLoggedIn) loadData();
-        else navigate('/super-admin');
+      } catch (err) {
+        console.error('Session check error:', err);
+        navigate('/super-admin');
       }
     };
 
     checkSession();
   }, [navigate]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [generatedCreds, setGeneratedCreds] = useState<{ principal: string; teacher: string; pass: string } | null>(null);
@@ -201,8 +214,19 @@ export const SuperAdminDashboard = () => {
     name: '',
     location: '',
     students: '',
-    principalName: '',
+    principalName: ''
   });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center font-mono">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
+          <p className="text-kenya-green font-bold uppercase tracking-widest">Initializing HQ Command...</p>
+        </div>
+      </div>
+    );
+  }
 
   const [newStory, setNewStory] = useState({
     name: '',
@@ -340,6 +364,7 @@ export const SuperAdminDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('alakara_super_admin');
     navigate('/super-admin');
   };
 
