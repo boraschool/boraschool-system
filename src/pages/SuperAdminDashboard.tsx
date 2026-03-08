@@ -170,7 +170,7 @@ export const SuperAdminDashboard = () => {
             setAdminProfile(profile);
             await loadData();
             setIsLoading(false); // Only stop loading after data is ready
-          } else if (profileEmail && (profileEmail.toLowerCase() === 'bahatisolomon.bs@gmail.com' || profileEmail === 'admin@boraschool.ac.ke')) {
+          } else if (profileEmail && (profileEmail.toLowerCase() === 'bahatisolomon.bs@gmail.com' || profileEmail.toLowerCase() === 'bahatisolomon33@gmail.com' || profileEmail === 'admin@boraschool.ac.ke')) {
             // Special fallback for the super admin email if profile query fails
             const fallbackProfile = { email: profileEmail, role: 'super-admin', name: 'Super Admin' };
             setAdminProfile(fallbackProfile);

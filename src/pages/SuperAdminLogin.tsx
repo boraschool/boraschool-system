@@ -60,7 +60,7 @@ export const SuperAdminLogin = () => {
 
         if (profileError || !profile || profile.role !== 'super-admin') {
           // If profile doesn't exist or role is wrong, check if it's the requested super admin
-          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com') {
+          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' || username.toLowerCase() === 'bahatisolomon33@gmail.com') {
             // Create profile if it doesn't exist (only for this specific email)
             const { error: insertError } = await supabase.from('profiles').upsert({
               id: data.user.id,
@@ -91,7 +91,7 @@ export const SuperAdminLogin = () => {
         const adminData = { id: 'admin-mock', email: 'admin@boraschool.ac.ke', role: 'super-admin', name: 'System Admin' };
         localStorage.setItem('alakara_super_admin', JSON.stringify(adminData));
         navigate('/super-admin/dashboard');
-      } else if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' && password === 'Godalways@95') {
+      } else if ((username.toLowerCase() === 'bahatisolomon.bs@gmail.com' || username.toLowerCase() === 'bahatisolomon33@gmail.com') && password === 'Godalways@95') {
         // This is the requested super admin
         const adminData = { id: 'solomon-mock', email: username.toLowerCase(), role: 'super-admin', name: 'Solomon Isiya' };
         localStorage.setItem('alakara_super_admin', JSON.stringify(adminData));
