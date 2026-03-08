@@ -24,7 +24,8 @@ import {
   Eye,
   EyeOff,
   MessageSquare,
-  Quote
+  Quote,
+  Loader2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -168,10 +169,14 @@ export const SuperAdminDashboard = () => {
           if (profile && profile.role === 'super-admin') {
             setAdminProfile(profile);
             await loadData();
+            setIsLoading(false); // Only stop loading after data is ready
           } else if (profileEmail && (profileEmail.toLowerCase() === 'bahatisolomon.bs@gmail.com' || profileEmail === 'admin@boraschool.ac.ke')) {
             // Special fallback for the super admin email if profile query fails
-            setAdminProfile({ email: profileEmail, role: 'super-admin', name: 'Super Admin' });
+            const fallbackProfile = { email: profileEmail, role: 'super-admin', name: 'Super Admin' };
+            setAdminProfile(fallbackProfile);
+            localStorage.setItem('alakara_super_admin', JSON.stringify(fallbackProfile));
             await loadData();
+            setIsLoading(false);
           } else {
             console.warn('Unauthorized super admin access attempt');
             navigate('/super-admin');
@@ -181,7 +186,15 @@ export const SuperAdminDashboard = () => {
         }
       } catch (err) {
         console.error('Session check error:', err);
-        navigate('/super-admin');
+        // If it's a "multiple objects" error or something similar, it might be okay to stay if we have fallback
+        const savedAdmin = localStorage.getItem('alakara_super_admin');
+        if (savedAdmin) {
+          setAdminProfile(JSON.parse(savedAdmin));
+          await loadData();
+          setIsLoading(false);
+        } else {
+          navigate('/super-admin');
+        }
       }
     };
 

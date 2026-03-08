@@ -103,45 +103,54 @@ export const TeacherDashboard = () => {
     const saved = localStorage.getItem('alakara_current_teacher');
     return saved ? JSON.parse(saved) : null;
   });
+  const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
     const fetchTeacherData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      let profileId = session?.user.id;
-      let profileEmail = session?.user.email;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        let profileId = session?.user.id;
+        let profileEmail = session?.user.email;
 
-      // Fallback: Check localStorage if no session
-      if (!profileId && currentTeacher) {
-        profileId = currentTeacher.id;
-        profileEmail = currentTeacher.email;
-      }
-
-      if (profileId || profileEmail) {
-        const query = supabase.from('profiles').select('*');
-        if (profileId && !profileId.startsWith('demo-')) {
-          query.eq('id', profileId);
-        } else if (profileEmail) {
-          query.eq('email', profileEmail).eq('role', 'teacher');
-        } else {
-          // If it's a demo teacher and no email, just keep currentTeacher
-          return;
+        // Fallback: Check localStorage if no session
+        if (!profileId && currentTeacher) {
+          profileId = currentTeacher.id;
+          profileEmail = currentTeacher.email;
         }
 
-        const { data: profile } = await query.single();
-        
-        if (profile) {
-          setCurrentTeacher(profile);
-          localStorage.setItem('alakara_current_teacher', JSON.stringify(profile));
+        if (profileId || profileEmail) {
+          const query = supabase.from('profiles').select('*');
+          if (profileId && !profileId.toString().startsWith('demo-')) {
+            query.eq('id', profileId);
+          } else if (profileEmail) {
+            query.eq('email', profileEmail).eq('role', 'teacher');
+          } else {
+            // If it's a demo teacher and no email, just keep currentTeacher
+            setIsVerifying(false);
+            return;
+          }
+
+          const { data: profile } = await query.single();
+          
+          if (profile) {
+            setCurrentTeacher(profile);
+            localStorage.setItem('alakara_current_teacher', JSON.stringify(profile));
+          }
+        } else if (!currentTeacher) {
+          // If no session and no local storage, redirect to login
+          navigate('/teacher-login');
         }
-      } else if (!currentTeacher) {
-        // If no session and no local storage, redirect to login
-        navigate('/teacher-login');
+      } catch (err) {
+        console.error('Error fetching teacher data:', err);
+        if (!currentTeacher) navigate('/teacher-login');
+      } finally {
+        setIsVerifying(false);
       }
     };
     fetchTeacherData();
   }, [navigate]);
 
-  if (!currentTeacher) {
+  if (isVerifying && !currentTeacher) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -150,6 +159,10 @@ export const TeacherDashboard = () => {
         </div>
       </div>
     );
+  }
+
+  if (!currentTeacher) {
+    return null;
   }
 
   const [examMaterials, setExamMaterials] = useState<any[]>([]);

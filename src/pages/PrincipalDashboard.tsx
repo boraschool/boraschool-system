@@ -82,6 +82,7 @@ export const PrincipalDashboard = () => {
     const saved = localStorage.getItem('alakara_current_school');
     return saved ? JSON.parse(saved) : null;
   });
+  const [isVerifying, setIsVerifying] = useState(true);
 
   const [staff, setStaff] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -133,49 +134,56 @@ export const PrincipalDashboard = () => {
 
   useEffect(() => {
     const fetchSchoolData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      let profileId = session?.user.id;
-      let profileEmail = session?.user.email;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        let profileId = session?.user.id;
+        let profileEmail = session?.user.email;
 
-      // Fallback: Check localStorage if no session
-      if (!profileId) {
-        const savedSchool = localStorage.getItem('alakara_current_school');
-        if (savedSchool) {
-          const schoolObj = JSON.parse(savedSchool);
-          profileEmail = schoolObj.principal_email;
-        }
-      }
-
-      if (profileId || profileEmail) {
-        const query = supabase.from('profiles').select('*');
-        if (profileId) {
-          query.eq('id', profileId);
-        } else {
-          query.eq('email', profileEmail).eq('role', 'principal');
-        }
-
-        const { data: profile } = await query.single();
-        
-        if (profile) {
-          const { data: schoolData } = await supabase
-            .from('schools')
-            .select('*')
-            .eq('id', profile.school_id)
-            .single();
-          
-          if (schoolData) {
-            setSchool(schoolData);
-            localStorage.setItem('alakara_current_school', JSON.stringify(schoolData));
+        // Fallback: Check localStorage if no session
+        if (!profileId) {
+          const savedSchool = localStorage.getItem('alakara_current_school');
+          if (savedSchool) {
+            const schoolObj = JSON.parse(savedSchool);
+            profileEmail = schoolObj.principal_email || schoolObj.email;
           }
         }
-      } else if (!school) {
-        navigate('/principal-login');
+
+        if (profileId || profileEmail) {
+          const query = supabase.from('profiles').select('*');
+          if (profileId) {
+            query.eq('id', profileId);
+          } else {
+            query.eq('email', profileEmail).eq('role', 'principal');
+          }
+
+          const { data: profile } = await query.single();
+          
+          if (profile) {
+            const { data: schoolData } = await supabase
+              .from('schools')
+              .select('*')
+              .eq('id', profile.school_id)
+              .single();
+            
+            if (schoolData) {
+              setSchool(schoolData);
+              localStorage.setItem('alakara_current_school', JSON.stringify(schoolData));
+            }
+          }
+        } else if (!school) {
+          navigate('/principal-login');
+        }
+      } catch (err) {
+        console.error('Error fetching school data:', err);
+        if (!school) navigate('/principal-login');
+      } finally {
+        setIsVerifying(false);
       }
     };
     fetchSchoolData();
   }, [navigate]);
 
-  if (!school) {
+  if (isVerifying && !school) {
     return (
       <div className="min-h-screen bg-kenya-black flex items-center justify-center">
         <div className="text-center">
@@ -184,6 +192,10 @@ export const PrincipalDashboard = () => {
         </div>
       </div>
     );
+  }
+
+  if (!school) {
+    return null;
   }
   const [isSuspended, setIsSuspended] = useState(false);
   const [daysToExpiry, setDaysToExpiry] = useState<number | null>(null);
@@ -922,8 +934,6 @@ export const PrincipalDashboard = () => {
         } else {
           setDaysToExpiry(null);
         }
-      } else if (!updatedSchool) {
-        navigate('/login');
       }
     };
 

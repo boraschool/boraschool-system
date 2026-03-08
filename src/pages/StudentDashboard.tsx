@@ -35,51 +35,60 @@ export const StudentDashboard = () => {
     const saved = localStorage.getItem('alakara_current_student');
     return saved ? JSON.parse(saved) : null;
   });
+  const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
     const fetchStudentData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      let profileId = session?.user.id;
-      let profileEmail = session?.user.email;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        let profileId = session?.user.id;
+        let profileEmail = session?.user.email;
 
-      // Fallback: Check localStorage if no session
-      if (!profileId && currentStudent) {
-        profileId = currentStudent.id;
-        profileEmail = currentStudent.email;
-      }
-
-      if (profileId || profileEmail) {
-        const query = supabase.from('profiles').select('*');
-        if (profileId && !profileId.startsWith('demo-')) {
-          query.eq('id', profileId);
-        } else if (profileEmail) {
-          query.eq('email', profileEmail).eq('role', 'student');
-        } else {
-          return;
+        // Fallback: Check localStorage if no session
+        if (!profileId && currentStudent) {
+          profileId = currentStudent.id;
+          profileEmail = currentStudent.email;
         }
 
-        const { data: profile } = await query.single();
-        
-        if (profile) {
-          const { data: studentData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('id', profile.student_id)
-            .single();
-          
-          if (studentData) {
-            setCurrentStudent(studentData);
-            localStorage.setItem('alakara_current_student', JSON.stringify(studentData));
+        if (profileId || profileEmail) {
+          const query = supabase.from('profiles').select('*');
+          if (profileId && !profileId.toString().startsWith('demo-')) {
+            query.eq('id', profileId);
+          } else if (profileEmail) {
+            query.eq('email', profileEmail).eq('role', 'student');
+          } else {
+            setIsVerifying(false);
+            return;
           }
+
+          const { data: profile } = await query.single();
+          
+          if (profile) {
+            const { data: studentData } = await supabase
+              .from('students')
+              .select('*')
+              .eq('id', profile.student_id)
+              .single();
+            
+            if (studentData) {
+              setCurrentStudent(studentData);
+              localStorage.setItem('alakara_current_student', JSON.stringify(studentData));
+            }
+          }
+        } else if (!currentStudent) {
+          navigate('/student-login');
         }
-      } else if (!currentStudent) {
-        navigate('/student-login');
+      } catch (err) {
+        console.error('Error fetching student data:', err);
+        if (!currentStudent) navigate('/student-login');
+      } finally {
+        setIsVerifying(false);
       }
     };
     fetchStudentData();
   }, [navigate]);
 
-  if (!currentStudent) {
+  if (isVerifying && !currentStudent) {
     return (
       <div className="min-h-screen bg-[#FF6321] flex items-center justify-center">
         <div className="text-center">
@@ -88,6 +97,10 @@ export const StudentDashboard = () => {
         </div>
       </div>
     );
+  }
+
+  if (!currentStudent) {
+    return null;
   }
 
   useEffect(() => {
