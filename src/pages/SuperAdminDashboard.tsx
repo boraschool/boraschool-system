@@ -52,6 +52,7 @@ interface School {
   students: string;
   status: 'Active' | 'Pending' | 'Suspended';
   date: string;
+  principalName: string;
   principalEmail: string;
   principalPass: string;
   teacherEmail: string;
@@ -82,11 +83,16 @@ export const SuperAdminDashboard = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [schoolsData, storiesData, materialsData] = await Promise.all([
+        const [schoolsData, storiesData, materialsData, statsData] = await Promise.all([
           supabaseService.getAllSchools(),
           supabaseService.getSuccessStories(),
-          supabaseService.getExamMaterials()
+          supabaseService.getExamMaterials(),
+          supabaseService.getSystemStats()
         ]);
+
+        if (statsData) {
+          setSystemStats(statsData);
+        }
 
         if (schoolsData) {
           const mappedSchools: School[] = schoolsData.map((s: any) => ({
@@ -96,6 +102,7 @@ export const SuperAdminDashboard = () => {
             students: '0',
             status: 'Active',
             date: new Date(s.created_at).toLocaleDateString(),
+            principalName: s.principal_name || 'N/A',
             principalEmail: s.principal_email,
             principalPass: '********',
             teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
@@ -186,11 +193,15 @@ export const SuperAdminDashboard = () => {
   }, [examMaterials]);
   
   const [schools, setSchools] = useState<School[]>([]);
+  const [systemStats, setSystemStats] = useState({ schools: 0, exams: 0, students: 0 });
+  const [liveSessions, setLiveSessions] = useState(1248);
+  const [storageUsed, setStorageUsed] = useState(12.4);
 
   const [newSchool, setNewSchool] = useState({
     name: '',
     location: '',
     students: '',
+    principalName: '',
   });
 
   const [newStory, setNewStory] = useState({
@@ -198,6 +209,17 @@ export const SuperAdminDashboard = () => {
     role: '',
     content: '',
   });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveSessions(prev => prev + Math.floor(Math.random() * 11) - 5);
+      setStorageUsed(prev => {
+        const next = prev + 0.001;
+        return next > 50 ? 50 : next;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const generateCredentials = (schoolName: string) => {
     const slug = schoolName.toLowerCase().replace(/\s+/g, '');
@@ -218,12 +240,17 @@ export const SuperAdminDashboard = () => {
         name: newSchool.name,
         location: newSchool.location,
         type: 'Secondary',
-        principal_name: 'Principal',
-        principal_email: creds.principal
+        principal_name: newSchool.principalName || 'Principal',
+        principal_email: creds.principal,
+        status: 'Active'
       });
 
       if (schoolData) {
+        // Generate a random UUID for the profile if one isn't provided by Auth
+        const profileId = crypto.randomUUID();
+        
         await supabaseService.createProfile({
+          id: profileId,
           school_id: schoolData.id,
           name: `${newSchool.name} Principal`,
           email: creds.principal,
@@ -238,6 +265,7 @@ export const SuperAdminDashboard = () => {
           students: '0',
           status: 'Active',
           date: new Date().toLocaleDateString(),
+          principalName: newSchool.principalName || 'Principal',
           principalEmail: creds.principal,
           principalPass: creds.pass,
           teacherEmail: creds.teacher,
@@ -246,7 +274,7 @@ export const SuperAdminDashboard = () => {
 
         setSchools([newSchoolObj, ...schools]);
         setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-        setNewSchool({ name: '', location: '', students: '' });
+        setNewSchool({ name: '', location: '', students: '', principalName: '' });
 
         addNotification({
           title: 'New School Registered',
@@ -255,9 +283,9 @@ export const SuperAdminDashboard = () => {
           role: 'super-admin'
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error adding school:', err);
-      alert('Failed to register school');
+      alert(`Failed to register school: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -304,9 +332,9 @@ export const SuperAdminDashboard = () => {
   };
 
   const stats = [
-    { label: 'Total Schools', value: schools.length.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
-    { label: 'Active Exams', value: '45,201', change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
-    { label: 'Total Students', value: '892,400', change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
+    { label: 'Total Schools', value: systemStats.schools.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
+    { label: 'Active Exams', value: systemStats.exams.toLocaleString(), change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
+    { label: 'Total Students', value: systemStats.students.toLocaleString(), change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
     { label: 'System Health', value: '99.9%', change: 'Stable', icon: ShieldCheck, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
   ];
 
@@ -596,15 +624,15 @@ export const SuperAdminDashboard = () => {
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Active Sessions</span>
-                        <span className="font-bold">1,248</span>
+                        <span className="font-bold">{liveSessions.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Storage Used</span>
-                        <span className="font-bold">12.4 TB / 50 TB</span>
+                        <span className="font-bold">{storageUsed.toFixed(2)} GB / 500 GB</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Last Backup</span>
-                        <span className="font-bold">Today, 02:15 AM</span>
+                        <span className="font-bold">{new Date().toLocaleDateString()}, {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
                   </div>
@@ -703,10 +731,10 @@ export const SuperAdminDashboard = () => {
                       <div>
                         <div className="flex justify-between text-sm mb-2">
                           <span className="text-gray-500">Storage Usage</span>
-                          <span className="font-bold text-kenya-black">68%</span>
+                          <span className="font-bold text-kenya-black">{((storageUsed / 500) * 100).toFixed(1)}%</span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-kenya-red rounded-full" style={{ width: '68%' }} />
+                          <div className="h-full bg-kenya-red rounded-full" style={{ width: `${(storageUsed / 500) * 100}%` }} />
                         </div>
                       </div>
                       <div>
@@ -787,6 +815,7 @@ export const SuperAdminDashboard = () => {
                           <td className="px-6 py-4">
                             <p className="font-bold text-kenya-black">{school.name}</p>
                             <p className="text-xs text-gray-500">{school.location}</p>
+                            <p className="text-[10px] text-kenya-green font-bold mt-1 uppercase tracking-wider">Principal: {school.principalName}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1">
@@ -1147,6 +1176,17 @@ export const SuperAdminDashboard = () => {
                         onChange={(e) => setNewSchool({ ...newSchool, name: e.target.value })}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
                         placeholder="e.g. Alliance High School"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Principal Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newSchool.principalName}
+                        onChange={(e) => setNewSchool({ ...newSchool, principalName: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                        placeholder="e.g. Dr. Jane Doe"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">

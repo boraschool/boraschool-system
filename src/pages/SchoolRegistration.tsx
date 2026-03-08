@@ -88,7 +88,8 @@ export const SchoolRegistration = () => {
           location: formData.location,
           type: formData.schoolType,
           principal_name: formData.principalName,
-          principal_email: formData.principalEmail
+          principal_email: formData.principalEmail,
+          status: 'Active'
         })
         .select()
         .single();

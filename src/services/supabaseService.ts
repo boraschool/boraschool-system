@@ -323,6 +323,20 @@ export const supabaseService = {
     return data;
   },
 
+  async getSystemStats() {
+    const [schools, exams, students] = await Promise.all([
+      supabase.from('schools').select('*', { count: 'exact', head: true }),
+      supabase.from('exams').select('*', { count: 'exact', head: true }),
+      supabase.from('students').select('*', { count: 'exact', head: true })
+    ]);
+
+    return {
+      schools: schools.count || 0,
+      exams: exams.count || 0,
+      students: students.count || 0
+    };
+  },
+
   async createSchool(school: Database['public']['Tables']['schools']['Insert']) {
     const { data, error } = await supabase
       .from('schools')
