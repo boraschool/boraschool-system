@@ -6,17 +6,14 @@ import {
   Settings, 
   LogOut, 
   LayoutDashboard, 
-  Bell, 
   Search,
   TrendingUp,
   ShieldCheck,
   Plus,
-  MoreVertical,
   Loader2,
   School as SchoolIcon,
   Calendar,
   FileText,
-  UserPlus,
   Mail,
   Phone,
   MapPin
@@ -28,26 +25,25 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip,
-  BarChart,
-  Bar,
-  Cell,
-  PieChart,
-  Pie
+  Tooltip
 } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { NotificationBell, addNotification } from '../components/NotificationBell';
+import { NotificationBell } from '../components/NotificationBell';
 import { supabase } from '../lib/supabase';
-import { supabaseService } from '../services/supabaseService';
 
 export const PrincipalDashboard = () => {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<any>(null);
-  const [school, setSchool] = useState<any>(null);
-  const [isVerifying, setIsVerifying] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [profile, setProfile] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_principal');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [school, setSchool] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_school');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isVerifying, setIsVerifying] = useState(!profile);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'staff' | 'students' | 'exams' | 'settings'>('dashboard');
 
   useEffect(() => {
@@ -56,19 +52,10 @@ export const PrincipalDashboard = () => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          // Check localStorage as fallback
-          const savedPrincipal = localStorage.getItem('alakara_current_principal');
-          if (savedPrincipal) {
-            const principal = JSON.parse(savedPrincipal);
-            setProfile(principal);
-            if (principal.school_id) {
-              const schoolData = await supabase.from('schools').select('*').eq('id', principal.school_id).single();
-              if (schoolData.data) setSchool(schoolData.data);
-            }
-            setIsVerifying(false);
-            return;
+          if (!profile) {
+            navigate('/principal-login');
           }
-          navigate('/principal-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -79,8 +66,8 @@ export const PrincipalDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'principal') {
-          console.error('Unauthorized access or profile error:', profileError);
-          navigate('/principal-login');
+          if (!profile) navigate('/principal-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -91,12 +78,13 @@ export const PrincipalDashboard = () => {
         setIsVerifying(false);
       } catch (err) {
         console.error('Verification error:', err);
-        navigate('/principal-login');
+        if (!profile) navigate('/principal-login');
+        setIsVerifying(false);
       }
     };
 
     verifySession();
-  }, [navigate]);
+  }, [navigate, profile]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -105,7 +93,7 @@ export const PrincipalDashboard = () => {
     navigate('/principal-login');
   };
 
-  if (isVerifying) {
+  if (isVerifying && !profile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -167,7 +155,7 @@ export const PrincipalDashboard = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 mt-auto">
           <button 
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:text-kenya-red hover:bg-kenya-red/5 rounded-xl transition-colors"
@@ -255,10 +243,8 @@ export const PrincipalDashboard = () => {
                 ))}
               </div>
 
-              {/* Quick Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                  {/* Performance Chart */}
                   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                     <h3 className="font-bold text-kenya-black mb-6">School Performance Trend</h3>
                     <div className="h-64">
@@ -286,37 +272,9 @@ export const PrincipalDashboard = () => {
                       </ResponsiveContainer>
                     </div>
                   </div>
-
-                  {/* Recent Activity */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-bold text-kenya-black">Recent Staff Activity</h3>
-                      <Button variant="ghost" size="sm" className="text-kenya-green">View All</Button>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                      {[
-                        { user: 'Mr. Kamau', action: 'Uploaded Term 2 Math Results', time: '2 hours ago', icon: FileText },
-                        { user: 'Ms. Njeri', action: 'Marked Attendance for Form 4B', time: '4 hours ago', icon: Users },
-                        { user: 'System', action: 'Generated Monthly Performance Report', time: '1 day ago', icon: TrendingUp },
-                      ].map((activity, i) => (
-                        <div key={i} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-                          <div className="bg-gray-100 p-2 rounded-lg">
-                            <activity.icon className="w-4 h-4 text-gray-600" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-kenya-black">
-                              <span className="font-bold">{activity.user}</span> {activity.action}
-                            </p>
-                            <p className="text-xs text-gray-500">{activity.time}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="space-y-8">
-                  {/* School Info Card */}
                   <div className="bg-kenya-black rounded-3xl p-8 text-white shadow-xl">
                     <div className="flex items-center gap-3 mb-6">
                       <div className="bg-kenya-green p-2 rounded-xl">
@@ -342,39 +300,8 @@ export const PrincipalDashboard = () => {
                       Edit School Profile
                     </Button>
                   </div>
-
-                  {/* Upcoming Events */}
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 className="font-bold text-kenya-black mb-4">Upcoming Events</h3>
-                    <div className="space-y-4">
-                      {[
-                        { date: '15 Jun', title: 'PTA Meeting', type: 'Meeting' },
-                        { date: '22 Jun', title: 'Mid-Term Exams', type: 'Academic' },
-                        { date: '28 Jun', title: 'Sports Day', type: 'Extra-curricular' },
-                      ].map((event, i) => (
-                        <div key={i} className="flex items-center gap-4">
-                          <div className="bg-kenya-red/5 text-kenya-red p-2 rounded-lg text-center min-w-[50px]">
-                            <p className="text-xs font-bold uppercase">{event.date.split(' ')[1]}</p>
-                            <p className="text-lg font-bold leading-none">{event.date.split(' ')[0]}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-kenya-black">{event.title}</p>
-                            <p className="text-xs text-gray-500">{event.type}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab !== 'dashboard' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-              <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-kenya-black mb-2">Module Loading...</h2>
-              <p className="text-gray-500">We are preparing the {activeTab} management interface for you.</p>
             </div>
           )}
         </div>

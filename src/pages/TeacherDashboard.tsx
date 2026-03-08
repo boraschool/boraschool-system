@@ -9,13 +9,9 @@ import {
   Bell, 
   Search,
   TrendingUp,
-  ShieldCheck,
   Plus,
-  MoreVertical,
   Loader2,
   Calendar,
-  FileText,
-  CheckCircle2,
   Clock,
   AlertCircle,
   ClipboardList,
@@ -23,28 +19,30 @@ import {
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
-  AreaChart, 
-  Area, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip,
   BarChart,
-  Bar,
-  Cell
+  Bar
 } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { NotificationBell, addNotification } from '../components/NotificationBell';
+import { NotificationBell } from '../components/NotificationBell';
 import { supabase } from '../lib/supabase';
-import { supabaseService } from '../services/supabaseService';
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<any>(null);
-  const [school, setSchool] = useState<any>(null);
-  const [isVerifying, setIsVerifying] = useState(true);
+  const [profile, setProfile] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_teacher');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [school, setSchool] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_school');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isVerifying, setIsVerifying] = useState(!profile);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'classes' | 'exams' | 'results' | 'profile'>('dashboard');
 
   useEffect(() => {
@@ -53,18 +51,8 @@ export const TeacherDashboard = () => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          const savedTeacher = localStorage.getItem('alakara_current_teacher');
-          if (savedTeacher) {
-            const teacher = JSON.parse(savedTeacher);
-            setProfile(teacher);
-            if (teacher.school_id) {
-              const schoolData = await supabase.from('schools').select('*').eq('id', teacher.school_id).single();
-              if (schoolData.data) setSchool(schoolData.data);
-            }
-            setIsVerifying(false);
-            return;
-          }
-          navigate('/teacher-login');
+          if (!profile) navigate('/teacher-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -75,8 +63,8 @@ export const TeacherDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'teacher') {
-          console.error('Unauthorized access or profile error:', profileError);
-          navigate('/teacher-login');
+          if (!profile) navigate('/teacher-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -86,12 +74,13 @@ export const TeacherDashboard = () => {
         setIsVerifying(false);
       } catch (err) {
         console.error('Verification error:', err);
-        navigate('/teacher-login');
+        if (!profile) navigate('/teacher-login');
+        setIsVerifying(false);
       }
     };
 
     verifySession();
-  }, [navigate]);
+  }, [navigate, profile]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -99,7 +88,7 @@ export const TeacherDashboard = () => {
     navigate('/teacher-login');
   };
 
-  if (isVerifying) {
+  if (isVerifying && !profile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -161,7 +150,7 @@ export const TeacherDashboard = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 mt-auto">
           <button 
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:text-kenya-red hover:bg-kenya-red/5 rounded-xl transition-colors"
@@ -247,7 +236,6 @@ export const TeacherDashboard = () => {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                  {/* Class Performance */}
                   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                     <h3 className="font-bold text-kenya-black mb-6">Class Performance Overview</h3>
                     <div className="h-64">
@@ -267,44 +255,12 @@ export const TeacherDashboard = () => {
                       </ResponsiveContainer>
                     </div>
                   </div>
-
-                  {/* Recent Submissions */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-bold text-kenya-black">Pending Tasks</h3>
-                      <Button variant="ghost" size="sm" className="text-kenya-red">View All</Button>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                      {[
-                        { task: 'Grade Math Quiz 3', class: 'Form 2B', deadline: 'Today', priority: 'High' },
-                        { task: 'Upload Biology Notes', class: 'Form 4C', deadline: 'Tomorrow', priority: 'Medium' },
-                        { task: 'Submit Term 2 Marks', class: 'All Classes', deadline: '3 days left', priority: 'Critical' },
-                      ].map((task, i) => (
-                        <div key={i} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-                          <div className={`p-2 rounded-lg ${task.priority === 'Critical' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}>
-                            <AlertCircle className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-kenya-black">{task.task}</p>
-                            <p className="text-xs text-gray-500">{task.class} • {task.deadline}</p>
-                          </div>
-                          <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                            task.priority === 'Critical' ? 'bg-red-100 text-red-700' : 
-                            task.priority === 'High' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {task.priority}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="space-y-8">
-                  {/* Quick Links */}
                   <div className="bg-kenya-black rounded-3xl p-8 text-white shadow-xl">
                     <h4 className="font-bold mb-6 flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-kenya-green" />
+                      <UserCheck className="w-5 h-5 text-kenya-green" />
                       Quick Actions
                     </h4>
                     <div className="space-y-3">
@@ -316,45 +272,10 @@ export const TeacherDashboard = () => {
                         Mark Attendance
                         <UserCheck className="w-4 h-4" />
                       </button>
-                      <button className="w-full py-3 px-4 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium text-left transition-all flex items-center justify-between">
-                        View Exam Timetable
-                        <Calendar className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* My Schedule */}
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 className="font-bold text-kenya-black mb-4">Today's Classes</h3>
-                    <div className="space-y-4">
-                      {[
-                        { time: '08:00', subject: 'Mathematics', class: 'Form 4C' },
-                        { time: '10:30', subject: 'Biology', class: 'Form 2B' },
-                        { time: '14:00', subject: 'Mathematics', class: 'Form 1A' },
-                      ].map((session, i) => (
-                        <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-gray-50 hover:border-kenya-red/20 transition-all">
-                          <div className="text-center min-w-[60px]">
-                            <p className="text-sm font-bold text-kenya-red">{session.time}</p>
-                          </div>
-                          <div className="h-8 w-px bg-gray-100" />
-                          <div>
-                            <p className="text-sm font-bold text-kenya-black">{session.subject}</p>
-                            <p className="text-xs text-gray-500">{session.class}</p>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab !== 'dashboard' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-              <Loader2 className="w-12 h-12 text-kenya-red animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-kenya-black mb-2">Module Loading...</h2>
-              <p className="text-gray-500">We are preparing the {activeTab} interface for you.</p>
             </div>
           )}
         </div>

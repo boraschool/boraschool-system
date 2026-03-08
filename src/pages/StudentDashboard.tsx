@@ -3,12 +3,9 @@ import {
   GraduationCap, 
   BookOpen, 
   LayoutDashboard, 
-  Bell, 
   Search,
   TrendingUp,
-  ShieldCheck,
   Loader2,
-  Calendar,
   FileText,
   CheckCircle2,
   Clock,
@@ -25,22 +22,25 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell
+  Tooltip
 } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { NotificationBell, addNotification } from '../components/NotificationBell';
+import { NotificationBell } from '../components/NotificationBell';
 import { supabase } from '../lib/supabase';
 
 export const StudentDashboard = () => {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<any>(null);
-  const [school, setSchool] = useState<any>(null);
-  const [isVerifying, setIsVerifying] = useState(true);
+  const [profile, setProfile] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_student');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [school, setSchool] = useState<any>(() => {
+    const saved = localStorage.getItem('alakara_current_school');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isVerifying, setIsVerifying] = useState(!profile);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'results' | 'exams' | 'resources' | 'profile'>('dashboard');
 
   useEffect(() => {
@@ -49,18 +49,8 @@ export const StudentDashboard = () => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          const savedStudent = localStorage.getItem('alakara_current_student');
-          if (savedStudent) {
-            const student = JSON.parse(savedStudent);
-            setProfile(student);
-            if (student.school_id) {
-              const schoolData = await supabase.from('schools').select('*').eq('id', student.school_id).single();
-              if (schoolData.data) setSchool(schoolData.data);
-            }
-            setIsVerifying(false);
-            return;
-          }
-          navigate('/student-login');
+          if (!profile) navigate('/student-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -71,8 +61,8 @@ export const StudentDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'student') {
-          console.error('Unauthorized access or profile error:', profileError);
-          navigate('/student-login');
+          if (!profile) navigate('/student-login');
+          setIsVerifying(false);
           return;
         }
 
@@ -82,12 +72,13 @@ export const StudentDashboard = () => {
         setIsVerifying(false);
       } catch (err) {
         console.error('Verification error:', err);
-        navigate('/student-login');
+        if (!profile) navigate('/student-login');
+        setIsVerifying(false);
       }
     };
 
     verifySession();
-  }, [navigate]);
+  }, [navigate, profile]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -95,7 +86,7 @@ export const StudentDashboard = () => {
     navigate('/student-login');
   };
 
-  if (isVerifying) {
+  if (isVerifying && !profile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -157,7 +148,7 @@ export const StudentDashboard = () => {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 mt-auto">
           <button 
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:text-kenya-red hover:bg-kenya-red/5 rounded-xl transition-colors"
@@ -243,7 +234,6 @@ export const StudentDashboard = () => {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                  {/* Performance Trend */}
                   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                     <h3 className="font-bold text-kenya-black mb-6">My Academic Progress</h3>
                     <div className="h-64">
@@ -270,97 +260,21 @@ export const StudentDashboard = () => {
                       </ResponsiveContainer>
                     </div>
                   </div>
-
-                  {/* Recent Results */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-bold text-kenya-black">Recent Subject Performance</h3>
-                      <Button variant="ghost" size="sm" className="text-kenya-green">View All</Button>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                      {[
-                        { subject: 'Mathematics', score: 82, grade: 'A-', trend: 'up' },
-                        { subject: 'English', score: 75, grade: 'B+', trend: 'stable' },
-                        { subject: 'Biology', score: 88, grade: 'A', trend: 'up' },
-                        { subject: 'History', score: 64, grade: 'C+', trend: 'down' },
-                      ].map((result, i) => (
-                        <div key={i} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="bg-gray-100 p-2 rounded-lg">
-                              <BookOpen className="w-4 h-4 text-gray-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-kenya-black">{result.subject}</p>
-                              <p className="text-xs text-gray-500">Score: {result.score}%</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-kenya-green">{result.grade}</p>
-                            <span className={`text-[10px] uppercase font-bold ${
-                              result.trend === 'up' ? 'text-green-500' : 
-                              result.trend === 'down' ? 'text-red-500' : 'text-gray-400'
-                            }`}>
-                              {result.trend}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="space-y-8">
-                  {/* Study Streak */}
                   <div className="bg-kenya-black rounded-3xl p-8 text-white shadow-xl text-center">
                     <div className="w-16 h-16 bg-kenya-green/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-kenya-green/30">
                       <TrendingUp className="w-8 h-8 text-kenya-green" />
                     </div>
                     <h4 className="text-xl font-bold mb-2">5 Day Streak!</h4>
                     <p className="text-gray-400 text-sm mb-6">You've logged in every day this week. Keep it up!</p>
-                    <div className="flex justify-center gap-2 mb-8">
-                      {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                        <div key={i} className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${i < 5 ? 'bg-kenya-green text-white' : 'bg-white/10 text-gray-500'}`}>
-                          {day}
-                        </div>
-                      ))}
-                    </div>
                     <Button className="w-full bg-kenya-green hover:bg-kenya-green/90 text-white font-bold py-3 rounded-xl">
                       Start Studying
                     </Button>
                   </div>
-
-                  {/* Upcoming Exams */}
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 className="font-bold text-kenya-black mb-4">Exam Countdown</h3>
-                    <div className="space-y-4">
-                      {[
-                        { subject: 'Mathematics', date: '12 Jun', days: 4 },
-                        { subject: 'Kiswahili', date: '14 Jun', days: 6 },
-                        { subject: 'Physics', date: '18 Jun', days: 10 },
-                      ].map((exam, i) => (
-                        <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-gray-50">
-                          <div className="bg-kenya-red/5 text-kenya-red p-2 rounded-lg text-center min-w-[50px]">
-                            <p className="text-xs font-bold uppercase">{exam.date.split(' ')[1]}</p>
-                            <p className="text-lg font-bold leading-none">{exam.date.split(' ')[0]}</p>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-kenya-black">{exam.subject}</p>
-                            <p className="text-xs text-gray-500">{exam.days} days left</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab !== 'dashboard' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-              <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-kenya-black mb-2">Module Loading...</h2>
-              <p className="text-gray-500">We are preparing your {activeTab} for you.</p>
             </div>
           )}
         </div>
