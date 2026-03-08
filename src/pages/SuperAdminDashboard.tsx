@@ -85,18 +85,39 @@ export const SuperAdminDashboard = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Use individual try-catches for each data load to prevent one failure from breaking everything
+        const loadSchools = async () => {
+          try { return await supabaseService.getAllSchools(); } 
+          catch (e) { console.warn('Schools table not ready'); return []; }
+        };
+        
+        const loadStories = async () => {
+          try { return await supabaseService.getSuccessStories(); } 
+          catch (e) { console.warn('Stories table not ready'); return []; }
+        };
+        
+        const loadMaterials = async () => {
+          try { return await supabaseService.getExamMaterials(); } 
+          catch (e) { console.warn('Materials table not ready'); return []; }
+        };
+        
+        const loadStats = async () => {
+          try { return await supabaseService.getSystemStats(); } 
+          catch (e) { console.warn('Stats query failed'); return null; }
+        };
+
         const [schoolsData, storiesData, materialsData, statsData] = await Promise.all([
-          supabaseService.getAllSchools(),
-          supabaseService.getSuccessStories(),
-          supabaseService.getExamMaterials(),
-          supabaseService.getSystemStats()
+          loadSchools(),
+          loadStories(),
+          loadMaterials(),
+          loadStats()
         ]);
 
         if (statsData) {
           setSystemStats(statsData);
         }
 
-        if (schoolsData) {
+        if (schoolsData && Array.isArray(schoolsData)) {
           const mappedSchools: School[] = schoolsData.map((s: any) => ({
             id: s.id,
             name: s.name,
@@ -113,11 +134,11 @@ export const SuperAdminDashboard = () => {
           setSchools(mappedSchools);
         }
 
-        if (storiesData) {
+        if (storiesData && Array.isArray(storiesData)) {
           setSuccessStories(storiesData);
         }
 
-        if (materialsData) {
+        if (materialsData && Array.isArray(materialsData)) {
           const mappedMaterials: ExamMaterial[] = materialsData.map((m: any) => ({
             id: m.id,
             title: m.title,

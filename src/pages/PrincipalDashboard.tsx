@@ -66,6 +66,20 @@ export const PrincipalDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'principal') {
+          // Try a simpler query if the join fails (e.g. schools table doesn't exist yet)
+          const { data: simpleProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+            
+          if (simpleProfile && simpleProfile.role === 'principal') {
+            setProfile(simpleProfile);
+            localStorage.setItem('alakara_current_principal', JSON.stringify(simpleProfile));
+            setIsVerifying(false);
+            return;
+          }
+
           if (!profile) navigate('/principal-login');
           setIsVerifying(false);
           return;

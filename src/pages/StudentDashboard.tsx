@@ -61,6 +61,20 @@ export const StudentDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'student') {
+          // Try a simpler query if the join fails
+          const { data: simpleProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+            
+          if (simpleProfile && simpleProfile.role === 'student') {
+            setProfile(simpleProfile);
+            localStorage.setItem('alakara_current_student', JSON.stringify(simpleProfile));
+            setIsVerifying(false);
+            return;
+          }
+
           if (!profile) navigate('/student-login');
           setIsVerifying(false);
           return;

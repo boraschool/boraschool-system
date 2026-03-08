@@ -86,19 +86,8 @@ export const SuperAdminLogin = () => {
         return;
       }
 
-      // 2. Fallback to hardcoded for prototype if Supabase fails or user not found
-      if (username === 'admin' && password === 'admin123') {
-        const adminData = { id: 'admin-mock', email: 'admin@boraschool.ac.ke', role: 'super-admin', name: 'System Admin' };
-        localStorage.setItem('alakara_super_admin', JSON.stringify(adminData));
-        navigate('/super-admin/dashboard');
-      } else if ((username.toLowerCase() === 'bahatisolomon.bs@gmail.com' || username.toLowerCase() === 'bahatisolomon33@gmail.com') && password === 'Godalways@95') {
-        // This is the requested super admin
-        const adminData = { id: 'solomon-mock', email: username.toLowerCase(), role: 'super-admin', name: 'Solomon Isiya' };
-        localStorage.setItem('alakara_super_admin', JSON.stringify(adminData));
-        navigate('/super-admin/dashboard');
-      } else {
-        setError(authError?.message || 'Invalid operator ID or access key');
-      }
+      // 2. Production security: Users must be registered in Supabase Auth
+      setError(authError?.message || 'Invalid credentials or unauthorized access');
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');
     } finally {

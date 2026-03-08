@@ -63,6 +63,20 @@ export const TeacherDashboard = () => {
           .single();
 
         if (profileError || !profileData || profileData.role !== 'teacher') {
+          // Try a simpler query if the join fails
+          const { data: simpleProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+            
+          if (simpleProfile && simpleProfile.role === 'teacher') {
+            setProfile(simpleProfile);
+            localStorage.setItem('alakara_current_teacher', JSON.stringify(simpleProfile));
+            setIsVerifying(false);
+            return;
+          }
+
           if (!profile) navigate('/teacher-login');
           setIsVerifying(false);
           return;
