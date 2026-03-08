@@ -78,6 +78,7 @@ export const PrincipalLogin = () => {
         }
 
         localStorage.setItem('alakara_current_school', JSON.stringify(school));
+        localStorage.setItem('alakara_current_principal', JSON.stringify(profile));
         navigate('/principal/dashboard');
         return;
       }
@@ -100,6 +101,7 @@ export const PrincipalLogin = () => {
 
         if (school) {
           localStorage.setItem('alakara_current_school', JSON.stringify(school));
+          localStorage.setItem('alakara_current_principal', JSON.stringify(customProfile));
           navigate('/principal/dashboard');
           return;
         }

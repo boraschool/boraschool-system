@@ -1,154 +1,93 @@
-import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   GraduationCap, 
   BookOpen, 
-  LogOut, 
   LayoutDashboard, 
+  Bell, 
   Search,
-  Download,
-  FileText,
-  Star,
-  Clock,
+  TrendingUp,
   ShieldCheck,
-  Menu,
-  X,
-  Loader2
+  Loader2,
+  Calendar,
+  FileText,
+  CheckCircle2,
+  Clock,
+  Award,
+  BookMarked,
+  LogOut,
+  User,
+  Star
 } from 'lucide-react';
-import { NotificationBell } from '../components/NotificationBell';
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { NotificationBell, addNotification } from '../components/NotificationBell';
 import { supabase } from '../lib/supabase';
-import { supabaseService } from '../services/supabaseService';
 
 export const StudentDashboard = () => {
   const navigate = useNavigate();
-  const [materials, setMaterials] = useState<any[]>([]);
-  const [exams, setExams] = useState<any[]>([]);
-  const [marks, setMarks] = useState<any[]>([]);
-  const [staff, setStaff] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'learning' | 'exams' | 'results' | 'materials'>('learning');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const [currentStudent, setCurrentStudent] = useState<any>(() => {
-    const saved = localStorage.getItem('alakara_current_student');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [profile, setProfile] = useState<any>(null);
+  const [school, setSchool] = useState<any>(null);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'results' | 'exams' | 'resources' | 'profile'>('dashboard');
 
   useEffect(() => {
-    const fetchStudentData = async () => {
+    const verifySession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        let profileId = session?.user.id;
-        let profileEmail = session?.user.email;
-
-        // Fallback: Check localStorage if no session
-        if (!profileId && currentStudent) {
-          profileId = currentStudent.id;
-          profileEmail = currentStudent.email;
-        }
-
-        if (profileId || profileEmail) {
-          const query = supabase.from('profiles').select('*');
-          if (profileId && !profileId.toString().startsWith('demo-')) {
-            query.eq('id', profileId);
-          } else if (profileEmail) {
-            query.eq('email', profileEmail).eq('role', 'student');
-          } else {
+        
+        if (!session) {
+          const savedStudent = localStorage.getItem('alakara_current_student');
+          if (savedStudent) {
+            const student = JSON.parse(savedStudent);
+            setProfile(student);
+            if (student.school_id) {
+              const schoolData = await supabase.from('schools').select('*').eq('id', student.school_id).single();
+              if (schoolData.data) setSchool(schoolData.data);
+            }
             setIsVerifying(false);
             return;
           }
-
-          const { data: profile } = await query.single();
-          
-          if (profile) {
-            const { data: studentData } = await supabase
-              .from('students')
-              .select('*')
-              .eq('id', profile.student_id)
-              .single();
-            
-            if (studentData) {
-              setCurrentStudent(studentData);
-              localStorage.setItem('alakara_current_student', JSON.stringify(studentData));
-            }
-          }
-        } else if (!currentStudent) {
           navigate('/student-login');
+          return;
         }
-      } catch (err) {
-        console.error('Error fetching student data:', err);
-        if (!currentStudent) navigate('/student-login');
-      } finally {
+
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*, schools(*)')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError || !profileData || profileData.role !== 'student') {
+          console.error('Unauthorized access or profile error:', profileError);
+          navigate('/student-login');
+          return;
+        }
+
+        setProfile(profileData);
+        setSchool(profileData.schools);
+        localStorage.setItem('alakara_current_student', JSON.stringify(profileData));
         setIsVerifying(false);
-      }
-    };
-    fetchStudentData();
-  }, [navigate]);
-
-  if (isVerifying && !currentStudent) {
-    return (
-      <div className="min-h-screen bg-[#FF6321] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-white animate-spin mx-auto mb-4" />
-          <p className="text-white font-black uppercase tracking-widest">Verifying credentials...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentStudent) {
-    return null;
-  }
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [materialsData, examsData, marksData, staffData] = await Promise.all([
-          supabaseService.getExamMaterials('Approved'),
-          supabaseService.getExams(currentStudent.school_id),
-          supabaseService.getMarksByStudent(currentStudent.id),
-          supabaseService.getStaff(currentStudent.school_id)
-        ]);
-
-        if (materialsData) {
-          const mapped = materialsData
-            .filter((m: any) => m.visibility === 'Public')
-            .map((m: any) => ({
-              id: m.id,
-              title: m.title,
-              subject: m.subject,
-              fileType: m.file_type,
-              uploadDate: new Date(m.created_at).toLocaleDateString(),
-              teacherName: m.teacher_name,
-              schoolName: m.school_name,
-              fileUrl: m.file_url
-            }));
-          setMaterials(mapped);
-        }
-
-        if (examsData) {
-          setExams(examsData.filter((e: any) => e.published && e.classes.includes(currentStudent.class)));
-        }
-
-        if (marksData) {
-          setMarks(marksData);
-        }
-
-        if (staffData) {
-          setStaff(staffData);
-        }
       } catch (err) {
-        console.error('Error loading student data:', err);
+        console.error('Verification error:', err);
+        navigate('/student-login');
       }
     };
 
-    loadData();
-    const interval = setInterval(loadData, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
-  }, [currentStudent.id, currentStudent.school_id, currentStudent.class]);
+    verifySession();
+  }, [navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -156,337 +95,272 @@ export const StudentDashboard = () => {
     navigate('/student-login');
   };
 
-  const filteredMaterials = materials.filter(m => 
-    m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.subject.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">Preparing Your Study Room...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#FF6321] flex font-sans relative">
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-black text-white flex flex-col shrink-0 border-r-8 border-black transition-transform duration-300 lg:relative lg:translate-x-0
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="p-8">
-          <div className="flex items-center justify-between mb-12">
-            <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate('/')}>
-              <div className="bg-white p-2 rounded-xl group-hover:rotate-12 transition-transform">
-                <GraduationCap className="w-8 h-8 text-black" />
-              </div>
-              <span className="text-2xl font-black tracking-tighter uppercase italic">Bora School <span className="text-[#FF6321]">Students</span></span>
-            </div>
-            <button 
-              className="lg:hidden text-gray-400 hover:text-white"
-              onClick={() => setIsSidebarOpen(false)}
-            >
-              <X className="w-8 h-8" />
-            </button>
+      <aside className="w-64 bg-white border-r border-gray-200 hidden lg:flex flex-col">
+        <div className="p-6 flex items-center gap-3 border-b border-gray-100">
+          <div className="bg-kenya-green p-1.5 rounded-lg">
+            <GraduationCap className="w-6 h-6 text-white" />
           </div>
-
-          <nav className="space-y-4">
-            <button 
-              onClick={() => { setActiveTab('learning'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-4 px-6 py-4 font-black uppercase tracking-widest transition-all ${activeTab === 'learning' ? 'bg-white text-black shadow-[8px_8px_0px_0px_rgba(0,255,0,1)]' : 'text-white hover:bg-white/10'}`}
-            >
-              <LayoutDashboard className="w-6 h-6" />
-              My Learning
-            </button>
-            <button 
-              onClick={() => { setActiveTab('materials'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-4 px-6 py-4 font-black uppercase tracking-widest transition-all ${activeTab === 'materials' ? 'bg-white text-black shadow-[8px_8px_0px_0px_rgba(0,255,0,1)]' : 'text-white hover:bg-white/10'}`}
-            >
-              <FileText className="w-6 h-6" />
-              Approved Materials
-            </button>
-            <button 
-              onClick={() => { setActiveTab('exams'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-4 px-6 py-4 font-black uppercase tracking-widest transition-all ${activeTab === 'exams' ? 'bg-white text-black shadow-[8px_8px_0px_0px_rgba(0,255,0,1)]' : 'text-white hover:bg-white/10'}`}
-            >
-              <BookOpen className="w-6 h-6" />
-              Exams
-            </button>
-            <button 
-              onClick={() => { setActiveTab('results'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-4 px-6 py-4 font-black uppercase tracking-widest transition-all ${activeTab === 'results' ? 'bg-white text-black shadow-[8px_8px_0px_0px_rgba(0,255,0,1)]' : 'text-white hover:bg-white/10'}`}
-            >
-              <Star className="w-6 h-6" />
-              Results
-            </button>
-          </nav>
+          <span className="text-xl font-bold text-kenya-black tracking-tight">
+            Student <span className="text-kenya-green">Hub</span>
+          </span>
         </div>
 
-        <div className="mt-auto p-8">
+        <nav className="flex-1 p-4 space-y-1">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'dashboard' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            Dashboard
+          </button>
+          <button 
+            onClick={() => setActiveTab('results')}
+            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'results' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Award className="w-5 h-5" />
+            My Results
+          </button>
+          <button 
+            onClick={() => setActiveTab('exams')}
+            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'exams' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <BookOpen className="w-5 h-5" />
+            Upcoming Exams
+          </button>
+          <button 
+            onClick={() => setActiveTab('resources')}
+            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'resources' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <BookMarked className="w-5 h-5" />
+            Study Materials
+          </button>
+          <button 
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium transition-all ${activeTab === 'profile' ? 'bg-kenya-green/10 text-kenya-green' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <User className="w-5 h-5" />
+            My Profile
+          </button>
+        </nav>
+
+        <div className="p-4 border-t border-gray-100">
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center gap-4 px-6 py-4 text-white hover:text-kenya-red font-black uppercase tracking-widest transition-all border-4 border-white hover:border-kenya-red"
+            className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:text-kenya-red hover:bg-kenya-red/5 rounded-xl transition-colors"
           >
-            <LogOut className="w-6 h-6" />
-            Sign Out
+            <LogOut className="w-5 h-5" />
+            Logout
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white border-l-8 border-black">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="h-24 bg-white border-b-8 border-black flex items-center justify-between px-4 lg:px-10 shrink-0">
-          <div className="flex items-center gap-4 lg:gap-6 flex-1">
-            <button 
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              onClick={() => setIsSidebarOpen(true)}
-            >
-              <Menu className="w-8 h-8 text-black" />
-            </button>
-            <div className="relative w-full max-w-xl hidden sm:block">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-black" />
+        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+          <div className="flex items-center gap-4 flex-1 max-w-xl">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="SEARCH MATERIALS..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-14 pr-6 py-4 bg-gray-100 border-4 border-black font-black uppercase tracking-widest focus:outline-none focus:bg-yellow-50 transition-all"
+                placeholder="Search subjects, results, or notes..." 
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green transition-all"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-6 ml-10">
-            <NotificationBell role="student" userId={currentStudent.id} />
-            <div className="text-right">
-              <p className="text-sm font-black text-black uppercase tracking-widest">Student Portal</p>
-              <p className="text-xs font-bold text-gray-500 uppercase">ADM-2024-001</p>
-            </div>
-            <div className="w-14 h-14 bg-[#FF6321] border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <GraduationCap className="w-8 h-8 text-white" />
+          <div className="flex items-center gap-4">
+            <NotificationBell role="student" userId={profile?.id} />
+            <div className="h-8 w-px bg-gray-200 mx-2" />
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-bold text-kenya-black">{profile?.name || 'Student'}</p>
+                <p className="text-xs text-gray-500">{profile?.class || 'Form 4'}</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-kenya-green/10 flex items-center justify-center border border-kenya-green/20">
+                <Star className="w-6 h-6 text-kenya-green" />
+              </div>
             </div>
           </div>
         </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-10 bg-[#f0f0f0]">
-          {activeTab === 'learning' ? (
-            <div className="space-y-12">
-              <div className="mb-12">
-                <h1 className="text-5xl font-black text-black uppercase tracking-tighter italic mb-4">My Learning Journey</h1>
-                <div className="h-4 w-48 bg-[#FF6321] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Current Class</p>
-                  <p className="text-4xl font-black text-black uppercase italic">{currentStudent.class}</p>
+        {/* Dashboard Content */}
+        <div className="flex-1 overflow-y-auto p-8">
+          {activeTab === 'dashboard' && (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-kenya-black">Habari, {profile?.name?.split(' ')[0]}!</h1>
+                  <p className="text-gray-500">Keep up the great work. Your progress is looking good.</p>
                 </div>
-                <div className="bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Total Exams</p>
-                  <p className="text-4xl font-black text-black uppercase italic">{exams.length}</p>
-                </div>
-                <div className="bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Learning Areas</p>
-                  <p className="text-4xl font-black text-black uppercase italic">8</p>
+                <div className="flex gap-3">
+                  <Button className="gap-2 bg-kenya-green hover:bg-kenya-green/90">
+                    <FileText className="w-4 h-4" />
+                    View Report Card
+                  </Button>
                 </div>
               </div>
 
-              <div className="bg-white border-4 border-black p-10 shadow-[16px_16px_0px_0px_rgba(0,0,0,1)]">
-                <h3 className="text-3xl font-black text-black uppercase tracking-tight mb-8 italic">Subject Performance Summary</h3>
-                <div className="space-y-6">
-                  {['Mathematics', 'English', 'Kiswahili', 'Science'].map(subject => {
-                    const subjectMarks = marks.filter(m => m.subject === subject);
-                    const avg = subjectMarks.length > 0 
-                      ? subjectMarks.reduce((sum, m) => sum + parseFloat(m.score), 0) / subjectMarks.length 
-                      : 0;
-                    return (
-                      <div key={subject} className="space-y-2">
-                        <div className="flex justify-between font-black uppercase tracking-widest text-sm">
-                          <span>{subject}</span>
-                          <span>{avg.toFixed(1)}%</span>
-                        </div>
-                        <div className="h-6 bg-gray-100 border-2 border-black">
-                          <div 
-                            className="h-full bg-[#FF6321] border-r-2 border-black transition-all duration-1000" 
-                            style={{ width: `${avg}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'exams' ? (
-            <div className="space-y-12">
-              <div className="mb-12">
-                <h1 className="text-5xl font-black text-black uppercase tracking-tighter italic mb-4">Examination Schedule</h1>
-                <div className="h-4 w-48 bg-[#FF6321] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
-              </div>
-
-              <div className="grid grid-cols-1 gap-6">
-                {exams.map((exam, index) => (
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                  { label: 'Overall Rank', value: '12/148', icon: Award, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: 'Mean Grade', value: 'B+', icon: Star, color: 'text-kenya-green', bg: 'bg-kenya-green/5' },
+                  { label: 'Attendance', value: '96%', icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: 'Assignments', value: '3 Pending', icon: Clock, color: 'text-kenya-red', bg: 'bg-kenya-red/5' },
+                ].map((stat, i) => (
                   <motion.div
-                    key={exam.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row md:items-center justify-between gap-6"
-                  >
-                    <div>
-                      <h3 className="text-2xl font-black text-black uppercase tracking-tight mb-1">{exam.title}</h3>
-                      <p className="text-sm font-bold text-gray-500 uppercase">{exam.term} - {exam.year}</p>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="text-center">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
-                        <span className={`px-4 py-1 border-2 border-black font-black uppercase text-xs ${
-                          exam.status === 'Active' ? 'bg-green-400 text-black' : 'bg-gray-200 text-gray-500'
-                        }`}>
-                          {exam.status}
-                        </span>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date</p>
-                        <p className="font-black text-black uppercase text-sm">{exam.startDate || 'TBA'}</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-                {exams.length === 0 && (
-                  <div className="py-20 text-center border-8 border-dashed border-black/10">
-                    <p className="text-3xl font-black text-black/20 uppercase italic">No exams scheduled yet</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : activeTab === 'results' ? (
-            <div className="space-y-12">
-              <div className="mb-12">
-                <h1 className="text-5xl font-black text-black uppercase tracking-tighter italic mb-4">My Academic Results</h1>
-                <div className="h-4 w-48 bg-[#FF6321] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
-              </div>
-
-              <div className="bg-white border-4 border-black shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="bg-black text-white">
-                      <th className="px-8 py-6 font-black uppercase tracking-widest text-sm">Subject</th>
-                      <th className="px-8 py-6 font-black uppercase tracking-widest text-sm">Teacher</th>
-                      <th className="px-8 py-6 font-black uppercase tracking-widest text-sm">Exam</th>
-                      <th className="px-8 py-6 font-black uppercase tracking-widest text-sm text-center">Score</th>
-                      <th className="px-8 py-6 font-black uppercase tracking-widest text-sm text-center">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y-4 divide-black">
-                    {marks.map((mark, index) => {
-                      const exam = exams.find(e => e.id === mark.examId);
-                      const subjectTeacher = staff.find(t => 
-                        t.assignedSubjects?.includes(mark.subject) && 
-                        t.assignedClasses?.includes(currentStudent.class)
-                      );
-                      const score = parseFloat(mark.score);
-                      let grade = 'E';
-                      if (score >= 80) grade = 'A';
-                      else if (score >= 70) grade = 'B';
-                      else if (score >= 60) grade = 'C';
-                      else if (score >= 50) grade = 'D';
-                      
-                      return (
-                        <tr key={mark.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-8 py-6 font-black uppercase text-black">{mark.subject}</td>
-                          <td className="px-8 py-6 font-bold uppercase text-gray-500 text-xs italic">{subjectTeacher?.name || 'Not Assigned'}</td>
-                          <td className="px-8 py-6 font-bold uppercase text-gray-500 text-sm">{exam?.title || 'Unknown Exam'}</td>
-                          <td className="px-8 py-6 font-black text-2xl text-center text-black">{score}%</td>
-                          <td className="px-8 py-6 text-center">
-                            <span className="inline-flex items-center justify-center w-12 h-12 bg-black text-white font-black text-xl italic">
-                              {grade}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {marks.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-8 py-20 text-center text-gray-400 font-black uppercase italic">
-                          No results posted yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : activeTab === 'materials' ? (
-            <>
-              <div className="mb-12">
-                <h1 className="text-5xl font-black text-black uppercase tracking-tighter italic mb-4">Approved Learning Materials</h1>
-                <div className="h-4 w-48 bg-[#FF6321] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {filteredMaterials.map((material, index) => (
-                  <motion.div
-                    key={material.id}
+                    key={stat.label}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-white border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all group"
+                    transition={{ delay: i * 0.1 }}
+                    className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
                   >
-                    <div className="flex justify-between items-start mb-6">
-                      <div className="w-16 h-16 bg-black flex items-center justify-center group-hover:rotate-12 transition-transform">
-                        <FileText className="w-8 h-8 text-white" />
-                      </div>
-                      <span className="bg-kenya-green text-white px-4 py-1 font-black uppercase text-xs border-2 border-black">
-                        {material.fileType}
-                      </span>
-                    </div>
-
-                    <h3 className="text-2xl font-black text-black uppercase tracking-tight mb-2 leading-none">
-                      {material.title}
-                    </h3>
-                    <p className="text-sm font-bold text-[#FF6321] uppercase mb-6">
-                      {material.subject}
-                    </p>
-
-                    <div className="space-y-3 mb-8">
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase">
-                        <Clock className="w-4 h-4" />
-                        Uploaded {material.uploadDate}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase">
-                        <GraduationCap className="w-4 h-4" />
-                        By {material.teacherName} ({material.schoolName})
+                    <div className="flex items-center justify-between mb-4">
+                      <div className={`p-2 rounded-lg ${stat.bg} ${stat.color}`}>
+                        <stat.icon className="w-6 h-6" />
                       </div>
                     </div>
-
-                    <Button className="w-full bg-black hover:bg-gray-800 text-white py-4 rounded-none font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_0px_rgba(255,99,33,1)]">
-                      <Download className="w-5 h-5" />
-                      Download Now
-                    </Button>
+                    <p className="text-sm text-gray-500 mb-1">{stat.label}</p>
+                    <p className="text-2xl font-bold text-kenya-black">{stat.value}</p>
                   </motion.div>
                 ))}
+              </div>
 
-                {filteredMaterials.length === 0 && (
-                  <div className="col-span-full py-20 text-center border-8 border-dashed border-black/10">
-                    <p className="text-3xl font-black text-black/20 uppercase italic">No materials available yet</p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                  {/* Performance Trend */}
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                    <h3 className="font-bold text-kenya-black mb-6">My Academic Progress</h3>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={[
+                          { exam: 'Term 1 Opener', score: 68 },
+                          { exam: 'Term 1 Mid', score: 72 },
+                          { exam: 'Term 1 End', score: 75 },
+                          { exam: 'Term 2 Opener', score: 74 },
+                          { exam: 'Term 2 Mid', score: 78 },
+                        ]}>
+                          <defs>
+                            <linearGradient id="colorProgress" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#008751" stopOpacity={0.1}/>
+                              <stop offset="95%" stopColor="#008751" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                          <XAxis dataKey="exam" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
+                          <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} />
+                          <Tooltip />
+                          <Area type="monotone" dataKey="score" stroke="#008751" strokeWidth={2} fillOpacity={1} fill="url(#colorProgress)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                )}
+
+                  {/* Recent Results */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="font-bold text-kenya-black">Recent Subject Performance</h3>
+                      <Button variant="ghost" size="sm" className="text-kenya-green">View All</Button>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {[
+                        { subject: 'Mathematics', score: 82, grade: 'A-', trend: 'up' },
+                        { subject: 'English', score: 75, grade: 'B+', trend: 'stable' },
+                        { subject: 'Biology', score: 88, grade: 'A', trend: 'up' },
+                        { subject: 'History', score: 64, grade: 'C+', trend: 'down' },
+                      ].map((result, i) => (
+                        <div key={i} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="bg-gray-100 p-2 rounded-lg">
+                              <BookOpen className="w-4 h-4 text-gray-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-kenya-black">{result.subject}</p>
+                              <p className="text-xs text-gray-500">Score: {result.score}%</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-kenya-green">{result.grade}</p>
+                            <span className={`text-[10px] uppercase font-bold ${
+                              result.trend === 'up' ? 'text-green-500' : 
+                              result.trend === 'down' ? 'text-red-500' : 'text-gray-400'
+                            }`}>
+                              {result.trend}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-8">
+                  {/* Study Streak */}
+                  <div className="bg-kenya-black rounded-3xl p-8 text-white shadow-xl text-center">
+                    <div className="w-16 h-16 bg-kenya-green/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-kenya-green/30">
+                      <TrendingUp className="w-8 h-8 text-kenya-green" />
+                    </div>
+                    <h4 className="text-xl font-bold mb-2">5 Day Streak!</h4>
+                    <p className="text-gray-400 text-sm mb-6">You've logged in every day this week. Keep it up!</p>
+                    <div className="flex justify-center gap-2 mb-8">
+                      {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+                        <div key={i} className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${i < 5 ? 'bg-kenya-green text-white' : 'bg-white/10 text-gray-500'}`}>
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    <Button className="w-full bg-kenya-green hover:bg-kenya-green/90 text-white font-bold py-3 rounded-xl">
+                      Start Studying
+                    </Button>
+                  </div>
+
+                  {/* Upcoming Exams */}
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                    <h3 className="font-bold text-kenya-black mb-4">Exam Countdown</h3>
+                    <div className="space-y-4">
+                      {[
+                        { subject: 'Mathematics', date: '12 Jun', days: 4 },
+                        { subject: 'Kiswahili', date: '14 Jun', days: 6 },
+                        { subject: 'Physics', date: '18 Jun', days: 10 },
+                      ].map((exam, i) => (
+                        <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-gray-50">
+                          <div className="bg-kenya-red/5 text-kenya-red p-2 rounded-lg text-center min-w-[50px]">
+                            <p className="text-xs font-bold uppercase">{exam.date.split(' ')[1]}</p>
+                            <p className="text-lg font-bold leading-none">{exam.date.split(' ')[0]}</p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-kenya-black">{exam.subject}</p>
+                            <p className="text-xs text-gray-500">{exam.days} days left</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-32 h-32 bg-black flex items-center justify-center mb-8 rotate-3">
-                <ShieldCheck className="w-16 h-16 text-white" />
-              </div>
-              <h2 className="text-4xl font-black text-black uppercase tracking-tighter mb-4 italic">Section Under Maintenance</h2>
-              <p className="text-xl font-bold text-gray-500 uppercase max-w-md">
-                We're currently updating your {activeTab} portal to bring you a better learning experience!
-              </p>
-              <div className="mt-12 h-4 w-64 bg-[#FF6321] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" />
+            </div>
+          )}
+
+          {activeTab !== 'dashboard' && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
+              <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-kenya-black mb-2">Module Loading...</h2>
+              <p className="text-gray-500">We are preparing your {activeTab} for you.</p>
             </div>
           )}
         </div>
