@@ -79,14 +79,22 @@ export const SuperAdminDashboard = () => {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schools' | 'analytics' | 'exams' | 'stories'>('dashboard');
 
+  const [systemStats, setSystemStats] = useState({ schools: 0, exams: 0, students: 0, sessions: 0 });
+  const [dbSize, setDbSize] = useState({ used: '0 MB', total: '500 MB', percentage: 0 });
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [schoolsData, storiesData, materialsData] = await Promise.all([
+        const [schoolsData, storiesData, materialsData, stats, dbSizeVal] = await Promise.all([
           supabaseService.getAllSchools(),
           supabaseService.getSuccessStories(),
-          supabaseService.getExamMaterials()
+          supabaseService.getExamMaterials(),
+          supabaseService.getSystemStats(),
+          supabaseService.getDatabaseSize()
         ]);
+
+        if (stats) setSystemStats(stats);
+        if (dbSizeVal) setDbSize(prev => ({ ...prev, used: dbSizeVal }));
 
         if (schoolsData) {
           const mappedSchools: School[] = schoolsData.map((s: any) => ({
@@ -304,9 +312,9 @@ export const SuperAdminDashboard = () => {
   };
 
   const stats = [
-    { label: 'Total Schools', value: schools.length.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
-    { label: 'Active Exams', value: '45,201', change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
-    { label: 'Total Students', value: '892,400', change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
+    { label: 'Total Schools', value: systemStats.schools.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
+    { label: 'Active Exams', value: systemStats.exams.toLocaleString(), change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
+    { label: 'Total Students', value: systemStats.students.toLocaleString(), change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
     { label: 'System Health', value: '99.9%', change: 'Stable', icon: ShieldCheck, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
   ];
 
@@ -591,20 +599,20 @@ export const SuperAdminDashboard = () => {
                         <span className="text-gray-400">Network Status</span>
                         <span className="font-bold text-kenya-green flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-kenya-green animate-pulse"></span>
-                          Online
+                          Active
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Active Sessions</span>
-                        <span className="font-bold">1,248</span>
+                        <span className="font-bold">{systemStats.sessions.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Storage Used</span>
-                        <span className="font-bold">12.4 TB / 50 TB</span>
+                        <span className="font-bold">{dbSize.used} / {dbSize.total}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Last Backup</span>
-                        <span className="font-bold">Today, 02:15 AM</span>
+                        <span className="font-bold">{new Date().toLocaleDateString()}</span>
                       </div>
                     </div>
                   </div>

@@ -341,5 +341,35 @@ export const supabaseService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async getSystemStats() {
+    const [
+      { count: schoolsCount },
+      { count: examsCount },
+      { count: studentsCount },
+      { count: sessionsCount }
+    ] = await Promise.all([
+      supabase.from('schools').select('*', { count: 'exact', head: true }),
+      supabase.from('exams').select('*', { count: 'exact', head: true }),
+      supabase.from('students').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }) // Using profiles as proxy for sessions
+    ]);
+
+    return {
+      schools: schoolsCount || 0,
+      exams: examsCount || 0,
+      students: studentsCount || 0,
+      sessions: sessionsCount || 0
+    };
+  },
+
+  async getDatabaseSize() {
+    const { data, error } = await supabase.rpc('get_database_size');
+    if (error) {
+      console.error('Error fetching DB size:', error);
+      return '0 MB';
+    }
+    return data;
   }
 };

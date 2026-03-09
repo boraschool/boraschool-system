@@ -65,22 +65,7 @@ export const SchoolRegistration = () => {
     setError('');
 
     try {
-      // 1. Sign up user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.principalEmail,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.principalName,
-            role: 'principal'
-          }
-        }
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Registration failed');
-
-      // 2. Create School in Supabase
+      // 1. Create School in Supabase first to get the ID
       const { data: schoolData, error: schoolError } = await supabase
         .from('schools')
         .insert({
@@ -95,18 +80,29 @@ export const SchoolRegistration = () => {
 
       if (schoolError) throw schoolError;
 
-      // 3. Create Profile in Supabase
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: authData.user.id,
-          name: formData.principalName,
-          email: formData.principalEmail,
-          role: 'principal',
-          school_id: schoolData.id
-        });
+      // 2. Sign up user in Supabase Auth with school_id in metadata
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.principalEmail,
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.principalName,
+            role: 'principal',
+            school_id: schoolData.id
+          }
+        }
+      });
 
-      if (profileError) throw profileError;
+      if (authError) {
+        // Cleanup school if auth fails
+        await supabase.from('schools').delete().eq('id', schoolData.id);
+        throw authError;
+      }
+      
+      if (!authData.user) throw new Error('Registration failed');
+
+      // 3. Profile is created automatically by database trigger
+      // We can optionally update it if needed, but the trigger should handle it.
 
       // Fallback for prototype/legacy
       const savedSchools = localStorage.getItem('alakara_schools');
