@@ -163,6 +163,33 @@ export const SuperAdminLogin = () => {
             >
               {isLoading ? 'Decrypting...' : 'Initialize Session'}
             </Button>
+
+            <div className="mt-6 pt-6 border-t border-white/5">
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Demo Environment</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-kenya-green animate-pulse" />
+                </div>
+                <p className="text-[10px] text-gray-500 mb-4 leading-relaxed uppercase tracking-wider">
+                  Use the button below to access the dashboard with pre-configured administrative privileges.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('admin@boraschool.com');
+                    setPassword('admin123');
+                    // We need to wait a tick for state to update or just pass values directly
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      if (form) form.requestSubmit();
+                    }, 100);
+                  }}
+                  className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest rounded transition-all border border-white/10"
+                >
+                  Quick Demo Access
+                </button>
+              </div>
+            </div>
           </form>
 
           <div className="mt-10 pt-6 border-t border-white/5">
