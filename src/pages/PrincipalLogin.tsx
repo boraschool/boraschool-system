@@ -15,15 +15,10 @@ export const PrincipalLogin = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Check if already logged in
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        const savedPrincipal = localStorage.getItem('alakara_current_principal');
-        if (savedPrincipal) {
-          navigate('/principal/dashboard');
-          return;
-        }
-        
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
@@ -31,8 +26,17 @@ export const PrincipalLogin = () => {
           .single();
         
         if (profile && profile.role === 'principal') {
-          localStorage.setItem('alakara_current_principal', JSON.stringify(profile));
-          navigate('/principal/dashboard');
+          // Fetch school data
+          const { data: school } = await supabase
+            .from('schools')
+            .select('*')
+            .eq('id', profile.school_id)
+            .single();
+          
+          if (school) {
+            localStorage.setItem('alakara_current_school', JSON.stringify(school));
+            navigate('/principal/dashboard');
+          }
         }
       }
     };
@@ -45,6 +49,7 @@ export const PrincipalLogin = () => {
     setError('');
 
     try {
+      // 1. Try Supabase Auth
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
@@ -53,7 +58,7 @@ export const PrincipalLogin = () => {
       if (!authError && data.user) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*, schools(*)')
+          .select('*')
           .eq('id', data.user.id)
           .single();
 
@@ -62,29 +67,60 @@ export const PrincipalLogin = () => {
           throw new Error('Unauthorized access. Only principals can log in here.');
         }
 
-        localStorage.setItem('alakara_current_principal', JSON.stringify(profile));
-        localStorage.setItem('alakara_current_school', JSON.stringify(profile.schools));
+        const { data: school, error: schoolError } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', profile.school_id)
+          .single();
+
+        if (schoolError || !school) {
+          throw new Error('School profile not found.');
+        }
+
+        localStorage.setItem('alakara_current_school', JSON.stringify(school));
         navigate('/principal/dashboard');
         return;
       }
 
-      // Fallback for custom credentials
-      const { data: customProfile } = await supabase
+      // 2. Fallback: Check profiles table for custom credentials (cross-device support)
+      const { data: customProfile, error: customError } = await supabase
         .from('profiles')
-        .select('*, schools(*)')
+        .select('*')
         .eq('email', email)
         .eq('password', password)
         .eq('role', 'principal')
         .single();
 
       if (customProfile) {
-        localStorage.setItem('alakara_current_principal', JSON.stringify(customProfile));
-        localStorage.setItem('alakara_current_school', JSON.stringify(customProfile.schools));
-        navigate('/principal/dashboard');
-        return;
+        const { data: school, error: schoolError } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', customProfile.school_id)
+          .single();
+
+        if (school) {
+          localStorage.setItem('alakara_current_school', JSON.stringify(school));
+          navigate('/principal/dashboard');
+          return;
+        }
       }
 
-      setError(authError?.message || 'Invalid principal credentials');
+      // 3. Fallback to LocalStorage for prototype (legacy)
+      const savedSchools = localStorage.getItem('alakara_schools');
+      const schools = savedSchools ? JSON.parse(savedSchools) : [];
+      const schoolByCreds = schools.find((s: any) => s.principalEmail === email && s.principalPass === password);
+
+      const savedStaff = localStorage.getItem('alakara_staff');
+      const staff = savedStaff ? JSON.parse(savedStaff) : [];
+      const staffPrincipal = staff.find((s: any) => s.email === email && s.password === password && s.role === 'Principal');
+
+      if (schoolByCreds || staffPrincipal) {
+        const school = schoolByCreds || schools.find((s: any) => s.id === '1');
+        localStorage.setItem('alakara_current_school', JSON.stringify(school));
+        navigate('/principal/dashboard');
+      } else {
+        setError(authError?.message || 'Invalid principal credentials or school not registered');
+      }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');
     } finally {
@@ -188,7 +224,7 @@ export const PrincipalLogin = () => {
               className="w-full bg-kenya-black hover:bg-gray-800 text-white py-4 rounded-2xl text-lg font-bold shadow-xl shadow-kenya-black/20 transition-all"
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Authorize Access'}
+              {isLoading ? 'Verifying...' : 'Authorize Access'}
             </Button>
           </form>
 
@@ -212,6 +248,9 @@ export const PrincipalLogin = () => {
         <p className="mt-8 text-center text-xs text-gray-500 tracking-widest uppercase">
           &copy; 2026 Bora School KE Leadership Portal
         </p>
+        <div className="mt-8 text-center text-gray-400 text-sm">
+          New to Bora School? <Link to="/register-school" className="text-kenya-green font-bold hover:underline">Register your school here</Link>
+        </div>
       </div>
     </div>
   );

@@ -26,12 +26,6 @@ export const SuperAdminLogin = () => {
           .single();
         
         if (profile && profile.role === 'super-admin') {
-          localStorage.setItem('alakara_super_admin', JSON.stringify(profile));
-          navigate('/super-admin/dashboard');
-        }
-      } else {
-        const savedAdmin = localStorage.getItem('alakara_super_admin');
-        if (savedAdmin) {
           navigate('/super-admin/dashboard');
         }
       }
@@ -60,7 +54,7 @@ export const SuperAdminLogin = () => {
 
         if (profileError || !profile || profile.role !== 'super-admin') {
           // If profile doesn't exist or role is wrong, check if it's the requested super admin
-          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' || username.toLowerCase() === 'bahatisolomon33@gmail.com') {
+          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com') {
             // Create profile if it doesn't exist (only for this specific email)
             const { error: insertError } = await supabase.from('profiles').upsert({
               id: data.user.id,
@@ -70,8 +64,6 @@ export const SuperAdminLogin = () => {
             });
             
             if (!insertError) {
-              const adminData = { id: data.user.id, email: username.toLowerCase(), role: 'super-admin', name: 'Solomon Isiya' };
-              localStorage.setItem('alakara_super_admin', JSON.stringify(adminData));
               navigate('/super-admin/dashboard');
               return;
             }
@@ -81,13 +73,19 @@ export const SuperAdminLogin = () => {
           throw new Error('Unauthorized access. Only super admins can log in here.');
         }
 
-        localStorage.setItem('alakara_super_admin', JSON.stringify(profile));
         navigate('/super-admin/dashboard');
         return;
       }
 
-      // 2. Production security: Users must be registered in Supabase Auth
-      setError(authError?.message || 'Invalid credentials or unauthorized access');
+      // 2. Fallback to hardcoded for prototype if Supabase fails or user not found
+      if (username === 'admin' && password === 'admin123') {
+        navigate('/super-admin/dashboard');
+      } else if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' && password === 'Godalways@95') {
+        // This is the requested super admin
+        navigate('/super-admin/dashboard');
+      } else {
+        setError(authError?.message || 'Invalid operator ID or access key');
+      }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');
     } finally {

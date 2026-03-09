@@ -5,40 +5,16 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 const isValidUrl = (url: string) => {
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return url.startsWith('http');
   } catch {
     return false;
   }
 };
 
 if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
-  console.error('Supabase credentials missing or invalid. Please check your environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).');
+  console.warn('Supabase credentials missing or invalid. Please check your environment variables.');
 }
 
-export const supabase = isValidUrl(supabaseUrl) && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-      global: {
-        headers: { 'x-application-name': 'bora-school-ke' },
-      },
-    })
-  : createClient('https://placeholder.supabase.co', 'placeholder');
-
-// Add a helper to check connection
-export const checkSupabaseConnection = async () => {
-  try {
-    const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
-    if (error) {
-      console.error('Supabase connection check failed:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('Supabase connection check threw an error:', err);
-    return false;
-  }
-};
+export const supabase = isValidUrl(supabaseUrl)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient('https://placeholder.supabase.co', 'placeholder'); // Use placeholder to avoid crash on init

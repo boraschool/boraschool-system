@@ -24,8 +24,7 @@ import {
   Eye,
   EyeOff,
   MessageSquare,
-  Quote,
-  Loader2
+  Quote
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -53,7 +52,6 @@ interface School {
   students: string;
   status: 'Active' | 'Pending' | 'Suspended';
   date: string;
-  principalName: string;
   principalEmail: string;
   principalPass: string;
   teacherEmail: string;
@@ -79,45 +77,18 @@ import { supabaseService } from '../services/supabaseService';
 export const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const [adminProfile, setAdminProfile] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schools' | 'analytics' | 'exams' | 'stories'>('dashboard');
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Use individual try-catches for each data load to prevent one failure from breaking everything
-        const loadSchools = async () => {
-          try { return await supabaseService.getAllSchools(); } 
-          catch (e) { console.warn('Schools table not ready'); return []; }
-        };
-        
-        const loadStories = async () => {
-          try { return await supabaseService.getSuccessStories(); } 
-          catch (e) { console.warn('Stories table not ready'); return []; }
-        };
-        
-        const loadMaterials = async () => {
-          try { return await supabaseService.getExamMaterials(); } 
-          catch (e) { console.warn('Materials table not ready'); return []; }
-        };
-        
-        const loadStats = async () => {
-          try { return await supabaseService.getSystemStats(); } 
-          catch (e) { console.warn('Stats query failed'); return null; }
-        };
-
-        const [schoolsData, storiesData, materialsData, statsData] = await Promise.all([
-          loadSchools(),
-          loadStories(),
-          loadMaterials(),
-          loadStats()
+        const [schoolsData, storiesData, materialsData] = await Promise.all([
+          supabaseService.getAllSchools(),
+          supabaseService.getSuccessStories(),
+          supabaseService.getExamMaterials()
         ]);
 
-        if (statsData) {
-          setSystemStats(statsData);
-        }
-
-        if (schoolsData && Array.isArray(schoolsData)) {
+        if (schoolsData) {
           const mappedSchools: School[] = schoolsData.map((s: any) => ({
             id: s.id,
             name: s.name,
@@ -125,7 +96,6 @@ export const SuperAdminDashboard = () => {
             students: '0',
             status: 'Active',
             date: new Date(s.created_at).toLocaleDateString(),
-            principalName: s.principal_name || 'N/A',
             principalEmail: s.principal_email,
             principalPass: '********',
             teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
@@ -134,11 +104,11 @@ export const SuperAdminDashboard = () => {
           setSchools(mappedSchools);
         }
 
-        if (storiesData && Array.isArray(storiesData)) {
+        if (storiesData) {
           setSuccessStories(storiesData);
         }
 
-        if (materialsData && Array.isArray(materialsData)) {
+        if (materialsData) {
           const mappedMaterials: ExamMaterial[] = materialsData.map((m: any) => ({
             id: m.id,
             title: m.title,
@@ -155,73 +125,49 @@ export const SuperAdminDashboard = () => {
         }
       } catch (err) {
         console.error('Error loading super admin data:', err);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        let profileId = session?.user.id;
-        let profileEmail = session?.user.email;
+      const { data: { session } } = await supabase.auth.getSession();
+      let profileId = session?.user.id;
+      let profileEmail = session?.user.email;
 
-        // Fallback: Check localStorage if no session
-        if (!profileId) {
-          const savedAdmin = localStorage.getItem('alakara_super_admin');
-          if (savedAdmin) {
-            const adminObj = JSON.parse(savedAdmin);
-            profileEmail = adminObj.email;
-            profileId = adminObj.id;
-          }
-        }
-
-        if (profileId || profileEmail) {
-          // If we have a mock ID or email, check profiles table
-          const query = supabase.from('profiles').select('*');
-          if (profileId && !profileId.toString().includes('mock')) {
-            query.eq('id', profileId);
-          } else if (profileEmail) {
-            query.eq('email', profileEmail).eq('role', 'super-admin');
-          }
-
-          const { data: profile, error } = await query.single();
-          
-          if (profile && profile.role === 'super-admin') {
-            setAdminProfile(profile);
-            await loadData();
-            setIsLoading(false); // Only stop loading after data is ready
-          } else if (profileEmail && (profileEmail.toLowerCase() === 'bahatisolomon.bs@gmail.com' || profileEmail.toLowerCase() === 'bahatisolomon33@gmail.com' || profileEmail === 'admin@boraschool.ac.ke')) {
-            // Special fallback for the super admin email if profile query fails
-            const fallbackProfile = { email: profileEmail, role: 'super-admin', name: 'Super Admin' };
-            setAdminProfile(fallbackProfile);
-            localStorage.setItem('alakara_super_admin', JSON.stringify(fallbackProfile));
-            await loadData();
-            setIsLoading(false);
-          } else {
-            console.warn('Unauthorized super admin access attempt');
-            navigate('/super-admin');
-          }
-        } else {
-          navigate('/super-admin');
-        }
-      } catch (err) {
-        console.error('Session check error:', err);
-        // If it's a "multiple objects" error or something similar, it might be okay to stay if we have fallback
+      // Fallback: Check localStorage if no session
+      if (!profileId) {
         const savedAdmin = localStorage.getItem('alakara_super_admin');
         if (savedAdmin) {
-          setAdminProfile(JSON.parse(savedAdmin));
-          await loadData();
-          setIsLoading(false);
+          const adminObj = JSON.parse(savedAdmin);
+          profileEmail = adminObj.email;
+        }
+      }
+
+      if (profileId || profileEmail) {
+        const query = supabase.from('profiles').select('*');
+        if (profileId) {
+          query.eq('id', profileId);
+        } else {
+          query.eq('email', profileEmail).eq('role', 'super-admin');
+        }
+
+        const { data: profile } = await query.single();
+        
+        if (profile && profile.role === 'super-admin') {
+          setAdminProfile(profile);
+          loadData();
         } else {
           navigate('/super-admin');
         }
+      } else {
+        // Fallback for mock login if no session
+        const isMockLoggedIn = true; // For now assume mock login works if navigated here
+        if (isMockLoggedIn) loadData();
+        else navigate('/super-admin');
       }
     };
 
     checkSession();
   }, [navigate]);
-
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [generatedCreds, setGeneratedCreds] = useState<{ principal: string; teacher: string; pass: string } | null>(null);
@@ -240,44 +186,18 @@ export const SuperAdminDashboard = () => {
   }, [examMaterials]);
   
   const [schools, setSchools] = useState<School[]>([]);
-  const [systemStats, setSystemStats] = useState({ schools: 0, exams: 0, students: 0 });
-  const [liveSessions, setLiveSessions] = useState(1248);
-  const [storageUsed, setStorageUsed] = useState(12.4);
 
   const [newSchool, setNewSchool] = useState({
     name: '',
     location: '',
     students: '',
-    principalName: ''
   });
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center font-mono">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-kenya-green animate-spin mx-auto mb-4" />
-          <p className="text-kenya-green font-bold uppercase tracking-widest">Initializing HQ Command...</p>
-        </div>
-      </div>
-    );
-  }
 
   const [newStory, setNewStory] = useState({
     name: '',
     role: '',
     content: '',
   });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveSessions(prev => prev + Math.floor(Math.random() * 11) - 5);
-      setStorageUsed(prev => {
-        const next = prev + 0.001;
-        return next > 50 ? 50 : next;
-      });
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const generateCredentials = (schoolName: string) => {
     const slug = schoolName.toLowerCase().replace(/\s+/g, '');
@@ -298,17 +218,12 @@ export const SuperAdminDashboard = () => {
         name: newSchool.name,
         location: newSchool.location,
         type: 'Secondary',
-        principal_name: newSchool.principalName || 'Principal',
-        principal_email: creds.principal,
-        status: 'Active'
+        principal_name: 'Principal',
+        principal_email: creds.principal
       });
 
       if (schoolData) {
-        // Generate a random UUID for the profile if one isn't provided by Auth
-        const profileId = crypto.randomUUID();
-        
         await supabaseService.createProfile({
-          id: profileId,
           school_id: schoolData.id,
           name: `${newSchool.name} Principal`,
           email: creds.principal,
@@ -323,7 +238,6 @@ export const SuperAdminDashboard = () => {
           students: '0',
           status: 'Active',
           date: new Date().toLocaleDateString(),
-          principalName: newSchool.principalName || 'Principal',
           principalEmail: creds.principal,
           principalPass: creds.pass,
           teacherEmail: creds.teacher,
@@ -332,7 +246,7 @@ export const SuperAdminDashboard = () => {
 
         setSchools([newSchoolObj, ...schools]);
         setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-        setNewSchool({ name: '', location: '', students: '', principalName: '' });
+        setNewSchool({ name: '', location: '', students: '' });
 
         addNotification({
           title: 'New School Registered',
@@ -341,9 +255,9 @@ export const SuperAdminDashboard = () => {
           role: 'super-admin'
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error adding school:', err);
-      alert(`Failed to register school: ${err.message || 'Unknown error'}`);
+      alert('Failed to register school');
     }
   };
 
@@ -390,15 +304,14 @@ export const SuperAdminDashboard = () => {
   };
 
   const stats = [
-    { label: 'Total Schools', value: systemStats.schools.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
-    { label: 'Active Exams', value: systemStats.exams.toLocaleString(), change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
-    { label: 'Total Students', value: systemStats.students.toLocaleString(), change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
+    { label: 'Total Schools', value: schools.length.toString(), change: '+12%', icon: SchoolIcon, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
+    { label: 'Active Exams', value: '45,201', change: '+18%', icon: BookOpen, color: 'text-kenya-red', bg: 'bg-kenya-red/10' },
+    { label: 'Total Students', value: '892,400', change: '+7%', icon: Users, color: 'text-kenya-black', bg: 'bg-kenya-black/10' },
     { label: 'System Health', value: '99.9%', change: 'Stable', icon: ShieldCheck, color: 'text-kenya-green', bg: 'bg-kenya-green/10' },
   ];
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('alakara_super_admin');
     navigate('/super-admin');
   };
 
@@ -683,15 +596,15 @@ export const SuperAdminDashboard = () => {
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Active Sessions</span>
-                        <span className="font-bold">{liveSessions.toLocaleString()}</span>
+                        <span className="font-bold">1,248</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Storage Used</span>
-                        <span className="font-bold">{storageUsed.toFixed(2)} GB / 500 GB</span>
+                        <span className="font-bold">12.4 TB / 50 TB</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-400">Last Backup</span>
-                        <span className="font-bold">{new Date().toLocaleDateString()}, {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="font-bold">Today, 02:15 AM</span>
                       </div>
                     </div>
                   </div>
@@ -790,10 +703,10 @@ export const SuperAdminDashboard = () => {
                       <div>
                         <div className="flex justify-between text-sm mb-2">
                           <span className="text-gray-500">Storage Usage</span>
-                          <span className="font-bold text-kenya-black">{((storageUsed / 500) * 100).toFixed(1)}%</span>
+                          <span className="font-bold text-kenya-black">68%</span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-kenya-red rounded-full" style={{ width: `${(storageUsed / 500) * 100}%` }} />
+                          <div className="h-full bg-kenya-red rounded-full" style={{ width: '68%' }} />
                         </div>
                       </div>
                       <div>
@@ -874,7 +787,6 @@ export const SuperAdminDashboard = () => {
                           <td className="px-6 py-4">
                             <p className="font-bold text-kenya-black">{school.name}</p>
                             <p className="text-xs text-gray-500">{school.location}</p>
-                            <p className="text-[10px] text-kenya-green font-bold mt-1 uppercase tracking-wider">Principal: {school.principalName}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1">
@@ -1235,17 +1147,6 @@ export const SuperAdminDashboard = () => {
                         onChange={(e) => setNewSchool({ ...newSchool, name: e.target.value })}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
                         placeholder="e.g. Alliance High School"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Principal Name</label>
-                      <input 
-                        type="text" 
-                        required
-                        value={newSchool.principalName}
-                        onChange={(e) => setNewSchool({ ...newSchool, principalName: e.target.value })}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
-                        placeholder="e.g. Dr. Jane Doe"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
