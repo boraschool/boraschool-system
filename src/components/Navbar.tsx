@@ -22,7 +22,7 @@ export const Navbar = () => {
             <div className="bg-kenya-green p-2 rounded-lg">
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-kenya-black tracking-tight">Bora School <span className="text-kenya-red">KE</span></span>
+            <span className="text-2xl font-bold text-kenya-black tracking-tight">Alakara <span className="text-kenya-red">KE</span></span>
           </div>
 
           {/* Desktop Nav */}
@@ -39,9 +39,6 @@ export const Navbar = () => {
             <div className="flex items-center gap-4 ml-4">
               <Link to="/login">
                 <Button variant="ghost" size="sm">Login</Button>
-              </Link>
-              <Link to="/register-school">
-                <Button size="sm">Register School</Button>
               </Link>
             </div>
           </div>
@@ -78,9 +75,6 @@ export const Navbar = () => {
           <div className="flex flex-col gap-3 pt-4 border-t border-gray-100">
             <Link to="/login" onClick={() => setIsOpen(false)}>
               <Button variant="outline" className="w-full">Login</Button>
-            </Link>
-            <Link to="/register-school" onClick={() => setIsOpen(false)}>
-              <Button className="w-full">Register School</Button>
             </Link>
           </div>
         </motion.div>

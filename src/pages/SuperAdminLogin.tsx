@@ -1,37 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { GraduationCap, Lock, User, ArrowLeft, ShieldAlert, Loader2 } from 'lucide-react';
+import { GraduationCap, Lock, User, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { PasswordResetModal } from '../components/PasswordResetModal';
 import { supabase } from '../lib/supabase';
+import { authService } from '../services/authService';
 
 export const SuperAdminLogin = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showResetModal, setShowResetModal] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Check if already logged in as super-admin
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile && profile.role === 'super-admin') {
-          navigate('/super-admin/dashboard');
-        }
-      }
-    };
-    checkSession();
-  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,55 +19,24 @@ export const SuperAdminLogin = () => {
     setError('');
 
     try {
-      // 1. Try Supabase Auth
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: username,
-        password: password,
+        email,
+        password,
       });
 
-      if (!authError && data.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
+      if (authError) throw authError;
 
-        if (profileError || !profile || profile.role !== 'super-admin') {
-          // If profile doesn't exist or role is wrong, check if it's the requested super admin
-          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com') {
-            // Create profile if it doesn't exist (only for this specific email)
-            const { error: insertError } = await supabase.from('profiles').upsert({
-              id: data.user.id,
-              name: 'Solomon Isiya',
-              email: username.toLowerCase(),
-              role: 'super-admin'
-            });
-            
-            if (!insertError) {
-              navigate('/super-admin/dashboard');
-              return;
-            }
-          }
-          
+      if (data.user) {
+        const profile = await authService.getCurrentProfile();
+        if (profile && profile.role === 'super_admin') {
+          navigate('/super-admin/dashboard');
+        } else {
           await supabase.auth.signOut();
-          throw new Error('Unauthorized access. Only super admins can log in here.');
+          setError('Access denied. Super Admin privileges required.');
         }
-
-        navigate('/super-admin/dashboard');
-        return;
-      }
-
-      // 2. Fallback to hardcoded for prototype if Supabase fails or user not found
-      if (username === 'admin' && password === 'admin123') {
-        navigate('/super-admin/dashboard');
-      } else if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' && password === 'Godalways@95') {
-        // This is the requested super admin
-        navigate('/super-admin/dashboard');
-      } else {
-        setError(authError?.message || 'Invalid operator ID or access key');
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred');
+      setError(err.message || 'Invalid email or password');
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +58,7 @@ export const SuperAdminLogin = () => {
             <GraduationCap className="w-8 h-8 text-kenya-green" />
           </div>
           <div className="text-left">
-            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Bora School <span className="text-kenya-red">HQ</span></span>
+            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Alakara <span className="text-kenya-red">HQ</span></span>
             <span className="block text-[10px] text-kenya-green font-bold tracking-[0.3em] uppercase opacity-70">Central Command</span>
           </div>
         </Link>
@@ -146,22 +95,22 @@ export const SuperAdminLogin = () => {
             )}
 
             <div>
-              <label htmlFor="username" className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                Operator ID
+              <label htmlFor="email" className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                Operator Email
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <User className="h-4 w-4 text-kenya-green" />
                 </div>
                 <input
-                  id="username"
-                  name="username"
-                  type="text"
+                  id="email"
+                  name="email"
+                  type="email"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-kenya-green focus:border-kenya-green transition-all text-sm"
-                  placeholder="ADMIN_01"
+                  placeholder="admin@boraschool.com"
                 />
               </div>
             </div>
@@ -201,13 +150,9 @@ export const SuperAdminLogin = () => {
               </div>
 
               <div className="text-[10px]">
-                <button 
-                  type="button"
-                  onClick={() => setShowResetModal(true)}
-                  className="font-bold text-kenya-red hover:text-red-400 uppercase tracking-wider"
-                >
+                <a href="#" className="font-bold text-kenya-red hover:text-red-400 uppercase tracking-wider">
                   Reset Key
-                </button>
+                </a>
               </div>
             </div>
 
@@ -231,15 +176,9 @@ export const SuperAdminLogin = () => {
           </div>
         </motion.div>
         
-        <PasswordResetModal 
-          isOpen={showResetModal} 
-          onClose={() => setShowResetModal(false)} 
-          role="super-admin" 
-        />
-
         <div className="mt-8 flex justify-between items-center px-2">
           <p className="text-[9px] text-gray-600 uppercase tracking-[0.3em]">
-            &copy; 2026 Bora School KE HQ
+            &copy; 2026 Alakara KE HQ
           </p>
           <div className="flex gap-4">
             <div className="w-1 h-1 rounded-full bg-kenya-green opacity-50" />
