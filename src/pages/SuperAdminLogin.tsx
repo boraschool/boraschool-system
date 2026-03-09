@@ -1,17 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { GraduationCap, Lock, User, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { GraduationCap, Lock, User, ArrowLeft, ShieldAlert, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { PasswordResetModal } from '../components/PasswordResetModal';
 import { supabase } from '../lib/supabase';
-import { authService } from '../services/authService';
 
 export const SuperAdminLogin = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if already logged in as super-admin
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && profile.role === 'super-admin') {
+          navigate('/super-admin/dashboard');
+        }
+      }
+    };
+    checkSession();
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,24 +39,55 @@ export const SuperAdminLogin = () => {
     setError('');
 
     try {
+      // 1. Try Supabase Auth
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: username,
+        password: password,
       });
 
-      if (authError) throw authError;
+      if (!authError && data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
 
-      if (data.user) {
-        const profile = await authService.getCurrentProfile();
-        if (profile && profile.role === 'super_admin') {
-          navigate('/super-admin/dashboard');
-        } else {
+        if (profileError || !profile || profile.role !== 'super-admin') {
+          // If profile doesn't exist or role is wrong, check if it's the requested super admin
+          if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com') {
+            // Create profile if it doesn't exist (only for this specific email)
+            const { error: insertError } = await supabase.from('profiles').upsert({
+              id: data.user.id,
+              name: 'Solomon Isiya',
+              email: username.toLowerCase(),
+              role: 'super-admin'
+            });
+            
+            if (!insertError) {
+              navigate('/super-admin/dashboard');
+              return;
+            }
+          }
+          
           await supabase.auth.signOut();
-          setError('Access denied. Super Admin privileges required.');
+          throw new Error('Unauthorized access. Only super admins can log in here.');
         }
+
+        navigate('/super-admin/dashboard');
+        return;
+      }
+
+      // 2. Fallback to hardcoded for prototype if Supabase fails or user not found
+      if (username === 'admin' && password === 'admin123') {
+        navigate('/super-admin/dashboard');
+      } else if (username.toLowerCase() === 'bahatisolomon.bs@gmail.com' && password === 'Godalways@95') {
+        // This is the requested super admin
+        navigate('/super-admin/dashboard');
+      } else {
+        setError(authError?.message || 'Invalid operator ID or access key');
       }
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +109,7 @@ export const SuperAdminLogin = () => {
             <GraduationCap className="w-8 h-8 text-kenya-green" />
           </div>
           <div className="text-left">
-            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Alakara <span className="text-kenya-red">HQ</span></span>
+            <span className="block text-2xl font-bold text-white tracking-tighter uppercase">Bora School <span className="text-kenya-red">HQ</span></span>
             <span className="block text-[10px] text-kenya-green font-bold tracking-[0.3em] uppercase opacity-70">Central Command</span>
           </div>
         </Link>
@@ -95,22 +146,22 @@ export const SuperAdminLogin = () => {
             )}
 
             <div>
-              <label htmlFor="email" className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                Operator Email
+              <label htmlFor="username" className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                Operator ID
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <User className="h-4 w-4 text-kenya-green" />
                 </div>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
+                  id="username"
+                  name="username"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="block w-full pl-11 pr-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-kenya-green focus:border-kenya-green transition-all text-sm"
-                  placeholder="admin@boraschool.com"
+                  placeholder="ADMIN_01"
                 />
               </div>
             </div>
@@ -150,9 +201,13 @@ export const SuperAdminLogin = () => {
               </div>
 
               <div className="text-[10px]">
-                <a href="#" className="font-bold text-kenya-red hover:text-red-400 uppercase tracking-wider">
+                <button 
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  className="font-bold text-kenya-red hover:text-red-400 uppercase tracking-wider"
+                >
                   Reset Key
-                </a>
+                </button>
               </div>
             </div>
 
@@ -163,33 +218,6 @@ export const SuperAdminLogin = () => {
             >
               {isLoading ? 'Decrypting...' : 'Initialize Session'}
             </Button>
-
-            <div className="mt-6 pt-6 border-t border-white/5">
-              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Demo Environment</span>
-                  <div className="w-1.5 h-1.5 rounded-full bg-kenya-green animate-pulse" />
-                </div>
-                <p className="text-[10px] text-gray-500 mb-4 leading-relaxed uppercase tracking-wider">
-                  Use the button below to access the dashboard with pre-configured administrative privileges.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('admin@boraschool.com');
-                    setPassword('admin123');
-                    // We need to wait a tick for state to update or just pass values directly
-                    setTimeout(() => {
-                      const form = document.querySelector('form');
-                      if (form) form.requestSubmit();
-                    }, 100);
-                  }}
-                  className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest rounded transition-all border border-white/10"
-                >
-                  Quick Demo Access
-                </button>
-              </div>
-            </div>
           </form>
 
           <div className="mt-10 pt-6 border-t border-white/5">
@@ -203,9 +231,15 @@ export const SuperAdminLogin = () => {
           </div>
         </motion.div>
         
+        <PasswordResetModal 
+          isOpen={showResetModal} 
+          onClose={() => setShowResetModal(false)} 
+          role="super-admin" 
+        />
+
         <div className="mt-8 flex justify-between items-center px-2">
           <p className="text-[9px] text-gray-600 uppercase tracking-[0.3em]">
-            &copy; 2026 Alakara KE HQ
+            &copy; 2026 Bora School KE HQ
           </p>
           <div className="flex gap-4">
             <div className="w-1 h-1 rounded-full bg-kenya-green opacity-50" />

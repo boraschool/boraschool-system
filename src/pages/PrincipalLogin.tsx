@@ -1,17 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { GraduationCap, Lock, User, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { GraduationCap, Lock, User, ArrowLeft, ShieldCheck, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { PasswordResetModal } from '../components/PasswordResetModal';
 import { supabase } from '../lib/supabase';
-import { authService } from '../services/authService';
 
 export const PrincipalLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if already logged in
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && profile.role === 'principal') {
+          // Fetch school data
+          const { data: school } = await supabase
+            .from('schools')
+            .select('*')
+            .eq('id', profile.school_id)
+            .single();
+          
+          if (school) {
+            localStorage.setItem('alakara_current_school', JSON.stringify(school));
+            navigate('/principal/dashboard');
+          }
+        }
+      }
+    };
+    checkSession();
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,24 +49,80 @@ export const PrincipalLogin = () => {
     setError('');
 
     try {
+      // 1. Try Supabase Auth
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email,
+        password: password,
       });
 
-      if (authError) throw authError;
+      if (!authError && data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
 
-      if (data.user) {
-        const profile = await authService.getCurrentProfile();
-        if (profile && profile.role === 'principal') {
-          navigate('/principal/dashboard');
-        } else {
+        if (profileError || !profile || profile.role !== 'principal') {
           await supabase.auth.signOut();
-          setError('Access denied. Principal privileges required.');
+          throw new Error('Unauthorized access. Only principals can log in here.');
+        }
+
+        const { data: school, error: schoolError } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', profile.school_id)
+          .single();
+
+        if (schoolError || !school) {
+          throw new Error('School profile not found.');
+        }
+
+        localStorage.setItem('alakara_current_school', JSON.stringify(school));
+        navigate('/principal/dashboard');
+        return;
+      }
+
+      // 2. Fallback: Check profiles table for custom credentials (cross-device support)
+      const { data: customProfile, error: customError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .eq('role', 'principal')
+        .single();
+
+      if (customProfile) {
+        const { data: school, error: schoolError } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', customProfile.school_id)
+          .single();
+
+        if (school) {
+          localStorage.setItem('alakara_current_school', JSON.stringify(school));
+          navigate('/principal/dashboard');
+          return;
         }
       }
+
+      // 3. Fallback to LocalStorage for prototype (legacy)
+      const savedSchools = localStorage.getItem('alakara_schools');
+      const schools = savedSchools ? JSON.parse(savedSchools) : [];
+      const schoolByCreds = schools.find((s: any) => s.principalEmail === email && s.principalPass === password);
+
+      const savedStaff = localStorage.getItem('alakara_staff');
+      const staff = savedStaff ? JSON.parse(savedStaff) : [];
+      const staffPrincipal = staff.find((s: any) => s.email === email && s.password === password && s.role === 'Principal');
+
+      if (schoolByCreds || staffPrincipal) {
+        const school = schoolByCreds || schools.find((s: any) => s.id === '1');
+        localStorage.setItem('alakara_current_school', JSON.stringify(school));
+        navigate('/principal/dashboard');
+      } else {
+        setError(authError?.message || 'Invalid principal credentials or school not registered');
+      }
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +138,7 @@ export const PrincipalLogin = () => {
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
           <div className="text-center">
-            <span className="text-3xl font-bold text-white tracking-tight">Alakara <span className="text-kenya-red">Principal</span></span>
+            <span className="text-3xl font-bold text-white tracking-tight">Bora School <span className="text-kenya-red">Principal</span></span>
           </div>
         </Link>
         
@@ -104,9 +190,18 @@ export const PrincipalLogin = () => {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="block text-sm font-bold text-kenya-black ml-1">
-                Access Key
-              </label>
+              <div className="flex items-center justify-between ml-1">
+                <label htmlFor="password" className="block text-sm font-bold text-kenya-black">
+                  Access Key
+                </label>
+                <button 
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  className="text-xs font-medium text-kenya-green hover:underline"
+                >
+                  Forgot Key?
+                </button>
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-gray-400" />
@@ -144,9 +239,18 @@ export const PrincipalLogin = () => {
           </div>
         </motion.div>
         
+        <PasswordResetModal 
+          isOpen={showResetModal} 
+          onClose={() => setShowResetModal(false)} 
+          role="principal" 
+        />
+
         <p className="mt-8 text-center text-xs text-gray-500 tracking-widest uppercase">
-          &copy; 2026 Alakara KE Leadership Portal
+          &copy; 2026 Bora School KE Leadership Portal
         </p>
+        <div className="mt-8 text-center text-gray-400 text-sm">
+          New to Bora School? <Link to="/register-school" className="text-kenya-green font-bold hover:underline">Register your school here</Link>
+        </div>
       </div>
     </div>
   );

@@ -1,17 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { GraduationCap, Lock, User, ArrowLeft, Rocket } from 'lucide-react';
+import { GraduationCap, Lock, User, ArrowLeft, Rocket, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { PasswordResetModal } from '../components/PasswordResetModal';
 import { supabase } from '../lib/supabase';
-import { authService } from '../services/authService';
 
 export const StudentLogin = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if already logged in
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && profile.role === 'student') {
+          // Fetch student data
+          const { data: student } = await supabase
+            .from('students')
+            .select('*')
+            .eq('id', profile.student_id)
+            .single();
+          
+          if (student) {
+            localStorage.setItem('alakara_current_student', JSON.stringify(student));
+            navigate('/student/dashboard');
+          }
+        }
+      }
+    };
+    checkSession();
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,24 +49,84 @@ export const StudentLogin = () => {
     setError('');
 
     try {
+      // 1. Try Supabase Auth
+      // Students use Admission Number as email prefix
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: `${username}@student.alakara.ac.ke`,
+        password: password,
       });
 
-      if (authError) throw authError;
+      if (!authError && data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
 
-      if (data.user) {
-        const profile = await authService.getCurrentProfile();
-        if (profile && profile.role === 'student') {
-          navigate('/student/dashboard');
-        } else {
+        if (profileError || !profile || profile.role !== 'student') {
           await supabase.auth.signOut();
-          setError('Access denied. Student privileges required.');
+          throw new Error('Unauthorized access. Only students can log in here.');
+        }
+
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', profile.student_id)
+          .single();
+
+        if (studentError || !student) {
+          throw new Error('Student profile not found.');
+        }
+
+        localStorage.setItem('alakara_current_student', JSON.stringify(student));
+        navigate('/student/dashboard');
+        return;
+      }
+
+      // 2. Fallback: Check profiles table for custom credentials (cross-device support)
+      const { data: customProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', `${username}@student.alakara.ac.ke`)
+        .eq('password', password)
+        .eq('role', 'student')
+        .single();
+
+      if (customProfile) {
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', customProfile.student_id)
+          .single();
+
+        if (student) {
+          localStorage.setItem('alakara_current_student', JSON.stringify(student));
+          navigate('/student/dashboard');
+          return;
         }
       }
+
+      // 3. Fallback to LocalStorage for prototype
+      const students = JSON.parse(localStorage.getItem('alakara_students') || '[]');
+      const student = students.find((s: any) => s.adm === username);
+
+      const isDefaultLogin = username === 'student' && password === 'student123';
+      
+      let isValidPassword = false;
+      if (student) {
+        const names = student.name.split(' ').map((n: string) => n.toLowerCase());
+        isValidPassword = names.includes(password.toLowerCase()) || password === 'password123';
+      }
+
+      if (isDefaultLogin || isValidPassword) {
+        const loggedInStudent = student || { id: 'S1', name: 'Alice Wanjiku', adm: 'ADM-2024-001', class: 'Form 1' };
+        localStorage.setItem('alakara_current_student', JSON.stringify(loggedInStudent));
+        navigate('/student/dashboard');
+      } else {
+        setError(authError?.message || 'Check your Admission Number or Password (use one of your names)!');
+      }
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +150,7 @@ export const StudentLogin = () => {
             <GraduationCap className="w-10 h-10 text-white" />
           </div>
           <div className="text-center mt-4">
-            <span className="text-4xl font-black text-white tracking-tighter uppercase italic">Alakara <span className="text-black">STUDENTS</span></span>
+            <span className="text-4xl font-black text-white tracking-tighter uppercase italic">Bora School <span className="text-black">STUDENTS</span></span>
           </div>
         </Link>
         
@@ -91,22 +181,22 @@ export const StudentLogin = () => {
             )}
 
             <div className="space-y-1">
-              <label htmlFor="email" className="block text-xs font-black text-black uppercase tracking-widest">
-                Student Email
+              <label htmlFor="username" className="block text-xs font-black text-black uppercase tracking-widest">
+                Admission Number
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-black" />
                 </div>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
+                  id="username"
+                  name="username"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="block w-full pl-11 pr-4 py-4 border-4 border-black rounded-none text-black font-bold placeholder-gray-400 focus:outline-none focus:bg-yellow-50 transition-all"
-                  placeholder="student@boraschool.com"
+                  placeholder="ADM-2024-001"
                 />
               </div>
             </div>
@@ -146,9 +236,13 @@ export const StudentLogin = () => {
               </div>
 
               <div className="text-xs">
-                <a href="#" className="font-black text-black hover:text-[#FF6321] uppercase underline decoration-4">
+                <button 
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  className="font-black text-black hover:text-[#FF6321] uppercase underline decoration-4"
+                >
                   Help!
-                </a>
+                </button>
               </div>
             </div>
 
@@ -172,8 +266,14 @@ export const StudentLogin = () => {
           </div>
         </motion.div>
         
+        <PasswordResetModal 
+          isOpen={showResetModal} 
+          onClose={() => setShowResetModal(false)} 
+          role="student" 
+        />
+
         <p className="mt-10 text-center text-[10px] font-black text-white uppercase tracking-[0.5em]">
-          &copy; 2026 Alakara Student Hub
+          &copy; 2026 Bora School Student Hub
         </p>
       </div>
     </div>

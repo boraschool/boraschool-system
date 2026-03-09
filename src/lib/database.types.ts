@@ -24,7 +24,6 @@ export interface Database {
           role?: string
           name: string
           email: string
-          password?: string | null
           avatar_url?: string | null
           school_id?: string | null
           created_at?: string
@@ -34,7 +33,6 @@ export interface Database {
           role?: string
           name?: string
           email?: string
-          password?: string | null
           avatar_url?: string | null
           school_id?: string | null
           created_at?: string
@@ -259,70 +257,6 @@ export interface Database {
           logo_url?: string | null
           letterhead_template?: string | null
           updated_at?: string
-        }
-      }
-      success_stories: {
-        Row: {
-          id: string
-          name: string
-          role: string
-          content: string
-          image_url: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          role: string
-          content: string
-          image_url?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          role?: string
-          content?: string
-          image_url?: string | null
-          created_at?: string
-        }
-      }
-      exam_materials: {
-        Row: {
-          id: string
-          title: string
-          subject: string
-          school_name: string
-          teacher_name: string
-          file_url: string
-          file_type: string
-          status: string
-          visibility: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          title: string
-          subject: string
-          school_name: string
-          teacher_name: string
-          file_url: string
-          file_type: string
-          status?: string
-          visibility?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          title?: string
-          subject?: string
-          school_name?: string
-          teacher_name?: string
-          file_url?: string
-          file_type?: string
-          status?: string
-          visibility?: string
-          created_at?: string
         }
       }
     }
