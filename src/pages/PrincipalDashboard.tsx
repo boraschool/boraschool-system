@@ -1651,9 +1651,10 @@ export const PrincipalDashboard = () => {
       title: newExam.title,
       term: newExam.term,
       year: newExam.year,
-      class_id: newExam.classes[0] || null, // Use first class for now to match schema
-      subject_id: newExam.subjects[0] || null, // Use first subject for now to match schema
-      locked: false,
+      classes: newExam.classes,
+      subjects: newExam.subjects,
+      status: 'Active',
+      published: false,
       weighting: 100,
       school_id: school.id
     };
@@ -1661,17 +1662,16 @@ export const PrincipalDashboard = () => {
     try {
       const { data, error } = await supabase.from('exams').insert(examData).select().single();
       if (error) throw error;
-
       if (data) {
         const exam = {
           ...data,
           schoolId: data.school_id,
           createdAt: data.created_at,
-          classes: data.class_id ? [data.class_id] : [],
-          subjects: data.subject_id ? [data.subject_id] : [],
-          status: data.locked ? 'Completed' : 'Active'
+          classes: (data.classes as string[]) || [],
+          subjects: (data.subjects as string[]) || [],
+          status: data.status || 'Active',
+          published: data.published || false
         };
-
         setExams([exam, ...exams]);
         setNewExam({ title: '', term: 'Term 1', year: '2026', classes: [], subjects: [], startDate: '', endDate: '' });
         setAcademicSubTab('overview');
@@ -2359,13 +2359,11 @@ export const PrincipalDashboard = () => {
     try {
       // Update Supabase
       await supabaseService.updateSchoolSettings(school.id, {
-        name: schoolSettings.name,
         motto: schoolSettings.motto,
         email: schoolSettings.email,
         phone: schoolSettings.phone,
         website: schoolSettings.website,
         address: schoolSettings.address,
-        letterhead_template: schoolSettings.letterheadTemplate,
         logo_url: schoolSettings.logo
       });
 

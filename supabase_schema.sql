@@ -6,9 +6,10 @@ CREATE TABLE IF NOT EXISTS schools (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     location TEXT,
-    type TEXT DEFAULT 'Secondary',
+    type TEXT DEFAULT 'Primary School',
     principal_name TEXT,
     principal_email TEXT UNIQUE,
+    principal_phone TEXT,
     status TEXT DEFAULT 'Active',
     subscription_expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS school_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     school_id UUID REFERENCES schools(id) ON DELETE CASCADE UNIQUE,
     logo_url TEXT,
+    motto TEXT,
     theme_color TEXT DEFAULT '#5A5A40',
     grading_system JSONB DEFAULT '[]',
     address TEXT,
@@ -127,6 +129,29 @@ CREATE TABLE IF NOT EXISTS streams (
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- 11. Automated Profile Creation Trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, role)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'name', 'New User'),
+    COALESCE(new.raw_user_meta_data->>'role', 'student')
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    name = EXCLUDED.name,
+    role = EXCLUDED.role;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- RLS Policies (Basic)
 ALTER TABLE schools ENABLE ROW LEVEL SECURITY;

@@ -17,6 +17,7 @@ import {
   Check,
   Copy,
   Mail,
+  Phone,
   Key,
   Filter,
   ShieldAlert,
@@ -53,6 +54,7 @@ interface School {
   status: 'Active' | 'Pending' | 'Suspended';
   date: string;
   principalEmail: string;
+  principalPhone?: string;
   principalPass: string;
   teacherEmail: string;
   teacherPass: string;
@@ -130,6 +132,7 @@ export const SuperAdminDashboard = () => {
             status: 'Active', // Default status
             date: new Date(s.created_at).toLocaleDateString(),
             principalEmail: s.principal_email,
+            principalPhone: s.principal_phone,
             principalPass: '********', // Don't show real passwords
             teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
             teacherPass: '********'
@@ -243,6 +246,7 @@ export const SuperAdminDashboard = () => {
             status: s.status as any || 'Active',
             date: new Date(s.created_at).toLocaleDateString(),
             principalEmail: s.principal_email,
+            principalPhone: s.principal_phone,
             principalPass: '********', // Don't expose passwords
             teacherEmail: `staff.${s.name.toLowerCase().replace(/\s+/g, '')}@alakara.ac.ke`,
             teacherPass: '********',
@@ -278,6 +282,8 @@ export const SuperAdminDashboard = () => {
     name: '',
     location: '',
     students: '',
+    type: 'Primary School',
+    principalPhone: '',
   });
 
   const [newStory, setNewStory] = useState({
@@ -320,9 +326,10 @@ export const SuperAdminDashboard = () => {
     supabase.from('schools').insert({
       name: newSchool.name,
       location: newSchool.location,
-      type: 'Secondary', // Default
+      type: newSchool.type,
       principal_name: 'Principal',
-      principal_email: creds.principal
+      principal_email: creds.principal,
+      principal_phone: newSchool.principalPhone
     }).select().single().then(({ data: schoolData, error: schoolError }) => {
       if (schoolError) {
         console.error('Error creating school:', schoolError);
@@ -343,7 +350,7 @@ export const SuperAdminDashboard = () => {
           
           setSchools([school, ...schools]);
           setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-          setNewSchool({ name: '', location: '', students: '' });
+          setNewSchool({ name: '', location: '', students: '', type: 'Primary School', principalPhone: '' });
 
           addNotification({
             title: 'New School Registered',
@@ -867,6 +874,12 @@ export const SuperAdminDashboard = () => {
                                 <Mail className="w-3 h-3" />
                                 {school.principalEmail}
                               </div>
+                              {school.principalPhone && (
+                                <div className="flex items-center gap-2 text-xs text-gray-600">
+                                  <Phone className="w-3 h-3" />
+                                  {school.principalPhone}
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono">
                                 <Key className="w-3 h-3" />
                                 {school.principalPass}
@@ -1221,6 +1234,33 @@ export const SuperAdminDashboard = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
                         placeholder="e.g. Alliance High School"
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">School Type</label>
+                        <select 
+                          value={newSchool.type}
+                          onChange={(e) => setNewSchool({ ...newSchool, type: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                        >
+                          <option value="Primary School">Primary School</option>
+                          <option value="Junior School">Junior School</option>
+                          <option value="Senior School">Senior School</option>
+                          <option value="Technical Training College">Technical Training College</option>
+                          <option value="College">College</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Principal Phone</label>
+                        <input 
+                          type="tel" 
+                          required
+                          value={newSchool.principalPhone}
+                          onChange={(e) => setNewSchool({ ...newSchool, principalPhone: e.target.value })}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                          placeholder="e.g. 0700000000"
+                        />
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

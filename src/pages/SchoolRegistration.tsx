@@ -24,7 +24,7 @@ export const SchoolRegistration = () => {
   const [formData, setFormData] = useState({
     schoolName: '',
     location: '',
-    schoolType: 'Secondary',
+    schoolType: 'Primary School',
     principalName: '',
     principalEmail: '',
     principalPhone: '',
@@ -88,17 +88,18 @@ export const SchoolRegistration = () => {
           location: formData.location,
           type: formData.schoolType,
           principal_name: formData.principalName,
-          principal_email: formData.principalEmail
+          principal_email: formData.principalEmail,
+          principal_phone: formData.principalPhone
         })
         .select()
         .single();
 
       if (schoolError) throw schoolError;
 
-      // 3. Create Profile in Supabase
+      // 3. Create or Update Profile in Supabase
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({
+        .upsert({
           id: authData.user.id,
           name: formData.principalName,
           email: formData.principalEmail,
@@ -119,6 +120,7 @@ export const SchoolRegistration = () => {
         type: formData.schoolType,
         principalName: formData.principalName,
         principalEmail: formData.principalEmail,
+        principalPhone: formData.principalPhone,
         principalPass: formData.password,
         status: 'Active',
         date: 'Just now',
@@ -210,10 +212,11 @@ export const SchoolRegistration = () => {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
                   >
-                    <option value="Primary">Primary School</option>
-                    <option value="Secondary">Secondary School</option>
-                    <option value="International">International School</option>
-                    <option value="Technical">Technical Institute</option>
+                    <option value="Primary School">Primary School</option>
+                    <option value="Junior School">Junior School</option>
+                    <option value="Senior School">Senior School</option>
+                    <option value="Technical Training College">Technical Training College</option>
+                    <option value="College">College</option>
                   </select>
                 </div>
               </div>
@@ -268,6 +271,22 @@ export const SchoolRegistration = () => {
                       onChange={handleInputChange}
                       className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
                       placeholder="principal@school.ac.ke"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      name="principalPhone"
+                      type="tel"
+                      required
+                      value={formData.principalPhone}
+                      onChange={handleInputChange}
+                      className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
+                      placeholder="e.g. 0712345678"
                     />
                   </div>
                 </div>

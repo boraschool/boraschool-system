@@ -15,8 +15,11 @@ export interface Database {
           role: string
           name: string
           email: string
+          password: string | null
           avatar_url: string | null
           school_id: string | null
+          assignments: Json | null
+          student_id: string | null
           created_at: string
         }
         Insert: {
@@ -24,8 +27,11 @@ export interface Database {
           role?: string
           name: string
           email: string
+          password?: string | null
           avatar_url?: string | null
           school_id?: string | null
+          assignments?: Json | null
+          student_id?: string | null
           created_at?: string
         }
         Update: {
@@ -33,8 +39,11 @@ export interface Database {
           role?: string
           name?: string
           email?: string
+          password?: string | null
           avatar_url?: string | null
           school_id?: string | null
+          assignments?: Json | null
+          student_id?: string | null
           created_at?: string
         }
       }
@@ -46,6 +55,7 @@ export interface Database {
           type: string | null
           principal_name: string | null
           principal_email: string | null
+          principal_phone: string | null
           status: string
           created_at: string
         }
@@ -56,6 +66,7 @@ export interface Database {
           type?: string | null
           principal_name?: string | null
           principal_email?: string | null
+          principal_phone?: string | null
           status?: string
           created_at?: string
         }
@@ -66,6 +77,7 @@ export interface Database {
           type?: string | null
           principal_name?: string | null
           principal_email?: string | null
+          principal_phone?: string | null
           status?: string
           created_at?: string
         }
@@ -73,122 +85,143 @@ export interface Database {
       exams: {
         Row: {
           id: string
-          title: string
-          term: string
-          year: string
-          class_id: string | null
-          subject_id: string | null
-          locked: boolean
-          weighting: number
-          created_at: string
           school_id: string
+          title: string
+          term: string | null
+          year: string | null
+          classes: Json | null
+          subjects: Json | null
+          status: string | null
+          published: boolean | null
+          weighting: number | null
+          created_at: string
         }
         Insert: {
           id?: string
-          title: string
-          term: string
-          year: string
-          class_id?: string | null
-          subject_id?: string | null
-          locked?: boolean
-          weighting?: number
-          created_at?: string
           school_id: string
+          title: string
+          term?: string | null
+          year?: string | null
+          classes?: Json | null
+          subjects?: Json | null
+          status?: string | null
+          published?: boolean | null
+          weighting?: number | null
+          created_at?: string
         }
         Update: {
           id?: string
-          title?: string
-          term?: string
-          year?: string
-          class_id?: string | null
-          subject_id?: string | null
-          locked?: boolean
-          weighting?: number
-          created_at?: string
           school_id?: string
+          title?: string
+          term?: string | null
+          year?: string | null
+          classes?: Json | null
+          subjects?: Json | null
+          status?: string | null
+          published?: boolean | null
+          weighting?: number | null
+          created_at?: string
         }
       }
       marks: {
         Row: {
           id: string
-          student_id: string
-          subject_id: string
           exam_id: string
-          score: number
+          student_id: string
+          subject: string
+          score: number | null
+          max_score: number | null
           grade: string | null
+          teacher_id: string | null
           created_at: string
         }
         Insert: {
           id?: string
-          student_id: string
-          subject_id: string
           exam_id: string
-          score: number
+          student_id: string
+          subject: string
+          score?: number | null
+          max_score?: number | null
           grade?: string | null
+          teacher_id?: string | null
           created_at?: string
         }
         Update: {
           id?: string
-          student_id?: string
-          subject_id?: string
           exam_id?: string
-          score?: number
+          student_id?: string
+          subject?: string
+          score?: number | null
+          max_score?: number | null
           grade?: string | null
+          teacher_id?: string | null
           created_at?: string
         }
       }
       audit_logs: {
         Row: {
           id: string
-          user_id: string
+          school_id: string | null
+          user_id: string | null
           action: string
-          details: string | null
-          timestamp: string
+          details: Json | null
+          created_at: string
         }
         Insert: {
           id?: string
-          user_id: string
+          school_id?: string | null
+          user_id?: string | null
           action: string
-          details?: string | null
-          timestamp?: string
+          details?: Json | null
+          created_at?: string
         }
         Update: {
           id?: string
-          user_id?: string
+          school_id?: string | null
+          user_id?: string | null
           action?: string
-          details?: string | null
-          timestamp?: string
+          details?: Json | null
+          created_at?: string
         }
       }
       students: {
         Row: {
           id: string
+          school_id: string | null
+          admission_number: string | null
           name: string
-          adm: string
-          class: string
-          gender: string | null
-          status: string
-          school_id: string
+          email: string | null
+          class: string | null
+          stream: string | null
+          parent_name: string | null
+          parent_phone: string | null
+          password: string | null
           created_at: string
         }
         Insert: {
           id?: string
+          school_id?: string | null
+          admission_number?: string | null
           name: string
-          adm: string
-          class: string
-          gender?: string | null
-          status?: string
-          school_id: string
+          email?: string | null
+          class?: string | null
+          stream?: string | null
+          parent_name?: string | null
+          parent_phone?: string | null
+          password?: string | null
           created_at?: string
         }
         Update: {
           id?: string
+          school_id?: string | null
+          admission_number?: string | null
           name?: string
-          adm?: string
-          class?: string
-          gender?: string | null
-          status?: string
-          school_id?: string
+          email?: string | null
+          class?: string | null
+          stream?: string | null
+          parent_name?: string | null
+          parent_phone?: string | null
+          password?: string | null
           created_at?: string
         }
       }
@@ -222,41 +255,41 @@ export interface Database {
         Row: {
           id: string
           school_id: string
-          name: string
-          motto: string | null
-          email: string | null
-          phone: string | null
-          website: string | null
-          address: string | null
           logo_url: string | null
-          letterhead_template: string | null
-          updated_at: string
+          motto: string | null
+          theme_color: string | null
+          grading_system: Json | null
+          address: string | null
+          website: string | null
+          phone: string | null
+          email: string | null
+          created_at: string
         }
         Insert: {
           id?: string
           school_id: string
-          name: string
-          motto?: string | null
-          email?: string | null
-          phone?: string | null
-          website?: string | null
-          address?: string | null
           logo_url?: string | null
-          letterhead_template?: string | null
-          updated_at?: string
+          motto?: string | null
+          theme_color?: string | null
+          grading_system?: Json | null
+          address?: string | null
+          website?: string | null
+          phone?: string | null
+          email?: string | null
+          created_at?: string
         }
         Update: {
           id?: string
           school_id?: string
-          name?: string
-          motto?: string | null
-          email?: string | null
-          phone?: string | null
-          website?: string | null
-          address?: string | null
           logo_url?: string | null
-          letterhead_template?: string | null
-          updated_at?: string
+          motto?: string | null
+          theme_color?: string | null
+          grading_system?: Json | null
+          address?: string | null
+          website?: string | null
+          phone?: string | null
+          email?: string | null
+          created_at?: string
         }
       }
     }
