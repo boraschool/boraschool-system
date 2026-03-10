@@ -25,7 +25,8 @@ import {
   Eye,
   EyeOff,
   MessageSquare,
-  Quote
+  Quote,
+  Loader2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -49,7 +50,8 @@ import { NotificationBell, addNotification } from '../components/NotificationBel
 interface School {
   id: string;
   name: string;
-  location: string;
+  county: string;
+  subcounty: string;
   students: string;
   status: 'Active' | 'Pending' | 'Suspended';
   date: string;
@@ -127,7 +129,8 @@ export const SuperAdminDashboard = () => {
           const mappedSchools: School[] = data.map((s: any) => ({
             id: s.id,
             name: s.name,
-            location: s.location,
+            county: s.county || '',
+            subcounty: s.subcounty || '',
             students: '0', // This would need a count query in a real app
             status: 'Active', // Default status
             date: new Date(s.created_at).toLocaleDateString(),
@@ -147,6 +150,7 @@ export const SuperAdminDashboard = () => {
     checkSession();
   }, [navigate]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [generatedCreds, setGeneratedCreds] = useState<{ principal: string; teacher: string; pass: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Pending' | 'Suspended'>('All');
@@ -280,7 +284,8 @@ export const SuperAdminDashboard = () => {
 
   const [newSchool, setNewSchool] = useState({
     name: '',
-    location: '',
+    county: '',
+    subcounty: '',
     students: '',
     type: 'Primary School',
     principalPhone: '',
@@ -302,65 +307,110 @@ export const SuperAdminDashboard = () => {
     };
   };
 
-  const handleAddSchool = (e: FormEvent) => {
+  const handleAddSchool = async (e: FormEvent) => {
     e.preventDefault();
+    console.log('Starting school registration process...');
     const creds = generateCredentials(newSchool.name);
     
     const defaultExpiry = new Date();
     defaultExpiry.setDate(defaultExpiry.getDate() + 30);
     const expiryStr = defaultExpiry.toISOString().split('T')[0];
 
-    const school: School = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...newSchool,
-      status: 'Active',
-      date: 'Just now',
-      principalEmail: creds.principal,
-      principalPass: creds.pass,
-      teacherEmail: creds.teacher,
-      teacherPass: creds.pass,
-      subscriptionExpiresAt: expiryStr
-    };
+    try {
+      setIsLoading(true);
+      // 1. Save to Supabase Schools table
+      console.log('Inserting into schools table:', newSchool.name);
+      const { data: schoolData, error: schoolError } = await supabase.from('schools').insert({
+        name: newSchool.name,
+        county: newSchool.county,
+        subcounty: newSchool.subcounty,
+        type: newSchool.type,
+        principal_name: 'Principal',
+        principal_email: creds.principal,
+        principal_phone: newSchool.principalPhone,
+        status: 'Active'
+      }).select().single();
 
-    // Save to Supabase
-    supabase.from('schools').insert({
-      name: newSchool.name,
-      location: newSchool.location,
-      type: newSchool.type,
-      principal_name: 'Principal',
-      principal_email: creds.principal,
-      principal_phone: newSchool.principalPhone
-    }).select().single().then(({ data: schoolData, error: schoolError }) => {
       if (schoolError) {
-        console.error('Error creating school:', schoolError);
-        alert('Failed to register school in database');
+        console.error('Database error (schools):', schoolError);
+        alert(`Database Error: ${schoolError.message || 'Could not register school'}. This might be due to a duplicate school name or email.`);
+        setIsLoading(false);
         return;
       }
 
-      if (schoolData) {
-        // Create principal profile
-        supabase.from('profiles').insert({
-          school_id: schoolData.id,
-          name: `${newSchool.name} Principal`,
-          email: creds.principal,
-          password: creds.pass,
-          role: 'principal'
-        }).then(({ error: profileError }) => {
-          if (profileError) console.error('Error creating principal profile:', profileError);
-          
-          setSchools([school, ...schools]);
-          setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
-          setNewSchool({ name: '', location: '', students: '', type: 'Primary School', principalPhone: '' });
-
-          addNotification({
-            title: 'New School Registered',
-            message: `${school.name} has been successfully registered on the platform.`,
-            type: 'success',
-            role: 'super-admin'
-          });
-        });
+      if (!schoolData) {
+        console.error('No school data returned after insert');
+        alert('Database Error: Registration failed to return school data.');
+        setIsLoading(false);
+        return;
       }
-    });
+
+      console.log('School created successfully:', schoolData.id);
+
+      // 2. Create principal profile
+      console.log('Creating principal profile...');
+      const { error: profileError } = await supabase.from('profiles').insert({
+        school_id: schoolData.id,
+        name: `${newSchool.name} Principal`,
+        email: creds.principal,
+        password: creds.pass,
+        role: 'principal'
+      });
+
+      if (profileError) {
+        console.error('Database error (profiles):', profileError);
+        // We don't stop here as the school is already created, but we log it
+      }
+
+      // 3. Initialize school settings
+      console.log('Initializing school settings...');
+      const { error: settingsError } = await supabase.from('school_settings').insert({
+        school_id: schoolData.id,
+        email: creds.principal,
+        phone: newSchool.principalPhone,
+        motto: 'Excellence in Education'
+      });
+
+      if (settingsError) {
+        console.error('Database error (settings):', settingsError);
+      }
+
+      const school: School = {
+        id: schoolData.id,
+        ...newSchool,
+        status: 'Active',
+        date: new Date().toLocaleDateString(),
+        principalEmail: creds.principal,
+        principalPass: creds.pass,
+        teacherEmail: creds.teacher,
+        teacherPass: creds.pass,
+        subscriptionExpiresAt: expiryStr
+      };
+      
+      setSchools([school, ...schools]);
+      setGeneratedCreds({ principal: creds.principal, teacher: creds.teacher, pass: creds.pass });
+      setNewSchool({ 
+        name: '', 
+        county: '', 
+        subcounty: '', 
+        students: '', 
+        type: 'Primary School', 
+        principalPhone: '' 
+      });
+
+      addNotification({
+        title: 'New School Registered',
+        message: `${school.name} has been successfully registered on the platform.`,
+        type: 'success',
+        role: 'super-admin'
+      });
+      console.log('Registration process completed successfully.');
+    } catch (err: any) {
+      console.error('Unexpected error during school registration:', err);
+      alert(`Unexpected Error: ${err.message || 'An unknown error occurred during registration.'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddStory = (e: FormEvent) => {
@@ -866,7 +916,7 @@ export const SuperAdminDashboard = () => {
                         <tr key={school.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4">
                             <p className="font-bold text-kenya-black">{school.name}</p>
-                            <p className="text-xs text-gray-500">{school.location}</p>
+                            <p className="text-xs text-gray-500">{school.county}, {school.subcounty}</p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1">
@@ -1264,29 +1314,49 @@ export const SuperAdminDashboard = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Location</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">County</label>
                         <input 
                           type="text" 
                           required
-                          value={newSchool.location}
-                          onChange={(e) => setNewSchool({ ...newSchool, location: e.target.value })}
+                          value={newSchool.county}
+                          onChange={(e) => setNewSchool({ ...newSchool, county: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
-                          placeholder="e.g. Kiambu, KE"
+                          placeholder="e.g. Kiambu"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Est. Students</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Sub-County</label>
                         <input 
                           type="text" 
                           required
-                          value={newSchool.students}
-                          onChange={(e) => setNewSchool({ ...newSchool, students: e.target.value })}
+                          value={newSchool.subcounty}
+                          onChange={(e) => setNewSchool({ ...newSchool, subcounty: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
-                          placeholder="e.g. 1,500"
+                          placeholder="e.g. Thika"
                         />
                       </div>
                     </div>
-                    <Button type="submit" className="w-full py-4">Generate Access Details</Button>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Est. Students</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newSchool.students}
+                        onChange={(e) => setNewSchool({ ...newSchool, students: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 focus:border-kenya-green"
+                        placeholder="e.g. 1,500"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full py-4" disabled={isLoading}>
+                      {isLoading ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Generating Details...
+                        </div>
+                      ) : (
+                        'Generate Access Details'
+                      )}
+                    </Button>
                   </form>
                 ) : (
                   <div className="space-y-6">

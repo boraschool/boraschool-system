@@ -177,5 +177,14 @@ export const supabaseService = {
       .select('*');
     if (error) throw error;
     return data;
+  },
+
+  async updateSchool(id: string, updates: Database['public']['Tables']['schools']['Update']) {
+    const { data, error } = await supabase
+      .from('schools')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+    return data;
   }
 };

@@ -51,7 +51,8 @@ export interface Database {
         Row: {
           id: string
           name: string
-          location: string | null
+          county: string | null
+          subcounty: string | null
           type: string | null
           principal_name: string | null
           principal_email: string | null
@@ -62,7 +63,8 @@ export interface Database {
         Insert: {
           id?: string
           name: string
-          location?: string | null
+          county?: string | null
+          subcounty?: string | null
           type?: string | null
           principal_name?: string | null
           principal_email?: string | null
@@ -73,7 +75,8 @@ export interface Database {
         Update: {
           id?: string
           name?: string
-          location?: string | null
+          county?: string | null
+          subcounty?: string | null
           type?: string | null
           principal_name?: string | null
           principal_email?: string | null

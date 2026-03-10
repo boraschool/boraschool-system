@@ -239,11 +239,15 @@ export const PrincipalDashboard = () => {
         if (settingsData) {
           setSchoolSettings({
             name: settingsData.name || school.name,
+            motto: settingsData.motto || '',
+            county: school.county || '',
+            subcounty: school.subcounty || '',
             address: settingsData.address || '',
             website: settingsData.website || '',
             phone: settingsData.phone || '',
             email: settingsData.email || '',
-            logo: settingsData.logo_url || null
+            logo: settingsData.logo_url || null,
+            letterheadTemplate: settingsData.letterhead_template || 'standard'
           });
           if (settingsData.grading_system) {
             setGradingSystem(settingsData.grading_system);
@@ -960,6 +964,8 @@ export const PrincipalDashboard = () => {
   const [schoolSettings, setSchoolSettings] = useState({
     name: '',
     motto: '',
+    county: '',
+    subcounty: '',
     address: '',
     phone: '',
     email: '',
@@ -2357,7 +2363,14 @@ export const PrincipalDashboard = () => {
   const handleUpdateSchool = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      // Update Supabase
+      // 1. Update Core School Info
+      await supabaseService.updateSchool(school.id, {
+        name: schoolSettings.name,
+        county: schoolSettings.county,
+        subcounty: schoolSettings.subcounty
+      });
+
+      // 2. Update School Settings
       await supabaseService.updateSchoolSettings(school.id, {
         motto: schoolSettings.motto,
         email: schoolSettings.email,
@@ -4511,6 +4524,28 @@ export const PrincipalDashboard = () => {
                                 onChange={(e) => setSchoolSettings({...schoolSettings, website: e.target.value})}
                                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
                                 placeholder="www.school.ac.ke"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-sm font-bold text-kenya-black">County</label>
+                              <input 
+                                type="text" 
+                                value={schoolSettings.county}
+                                onChange={(e) => setSchoolSettings({...schoolSettings, county: e.target.value})}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
+                                placeholder="e.g. Kiambu"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-bold text-kenya-black">Sub-County</label>
+                              <input 
+                                type="text" 
+                                value={schoolSettings.subcounty}
+                                onChange={(e) => setSchoolSettings({...schoolSettings, subcounty: e.target.value})}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20"
+                                placeholder="e.g. Thika"
                               />
                             </div>
                           </div>

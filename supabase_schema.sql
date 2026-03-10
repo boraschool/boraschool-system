@@ -5,7 +5,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS schools (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    location TEXT,
+    county TEXT,
+    subcounty TEXT,
     type TEXT DEFAULT 'Primary School',
     principal_name TEXT,
     principal_email TEXT UNIQUE,

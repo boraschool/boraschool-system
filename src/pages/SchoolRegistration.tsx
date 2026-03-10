@@ -23,7 +23,8 @@ export const SchoolRegistration = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     schoolName: '',
-    location: '',
+    county: '',
+    subcounty: '',
     schoolType: 'Primary School',
     principalName: '',
     principalEmail: '',
@@ -41,7 +42,7 @@ export const SchoolRegistration = () => {
   const handleNext = (e: FormEvent) => {
     e.preventDefault();
     if (step === 1) {
-      if (!formData.schoolName || !formData.location) {
+      if (!formData.schoolName || !formData.county || !formData.subcounty) {
         setError('Please fill in all school details');
         return;
       }
@@ -65,42 +66,51 @@ export const SchoolRegistration = () => {
     setError('');
 
     try {
-      // 1. Sign up user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.principalEmail,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.principalName,
-            role: 'principal'
-          }
-        }
-      });
+      setIsLoading(true);
+      setError('');
+      console.log('Starting self-registration process...');
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Registration failed');
-
-      // 2. Create School in Supabase
+      // 1. Create School in Supabase first to get school_id
+      console.log('Creating school in database...');
       const { data: schoolData, error: schoolError } = await supabase
         .from('schools')
         .insert({
           name: formData.schoolName,
-          location: formData.location,
+          county: formData.county,
+          subcounty: formData.subcounty,
           type: formData.schoolType,
           principal_name: formData.principalName,
           principal_email: formData.principalEmail,
-          principal_phone: formData.principalPhone
+          principal_phone: formData.principalPhone,
+          status: 'Active'
         })
         .select()
         .single();
 
-      if (schoolError) throw schoolError;
+      if (schoolError) {
+        console.error('Database error (schools):', schoolError);
+        throw new Error(`Database Error: ${schoolError.message || 'Could not register school'}`);
+      }
 
-      // 3. Create or Update Profile in Supabase
+      if (!schoolData) throw new Error('Database Error: Registration failed to return school data');
+
+      // 2. Initialize school settings
+      console.log('Initializing school settings...');
+      const { error: settingsError } = await supabase.from('school_settings').insert({
+        school_id: schoolData.id,
+        email: formData.principalEmail,
+        phone: formData.principalPhone,
+        motto: 'Excellence in Education'
+      });
+
+      if (settingsError) console.error('Database error (settings):', settingsError);
+
+      // 3. Create Principal Profile in Supabase
+      // We insert directly into profiles table to avoid Auth trigger issues
+      console.log('Creating principal profile...');
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          id: authData.user.id,
+        .insert({
           name: formData.principalName,
           email: formData.principalEmail,
           role: 'principal',
@@ -108,7 +118,12 @@ export const SchoolRegistration = () => {
           password: formData.password
         });
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Database error (profiles):', profileError);
+        throw new Error(`Database Error: ${profileError.message || 'Could not create profile'}`);
+      }
+
+      console.log('Self-registration completed successfully.');
 
       // Fallback for prototype/legacy
       const savedSchools = localStorage.getItem('alakara_schools');
@@ -116,7 +131,8 @@ export const SchoolRegistration = () => {
       const newSchool = {
         id: schoolData.id,
         name: formData.schoolName,
-        location: formData.location,
+        county: formData.county,
+        subcounty: formData.subcounty,
         type: formData.schoolType,
         principalName: formData.principalName,
         principalEmail: formData.principalEmail,
@@ -188,19 +204,37 @@ export const SchoolRegistration = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Location</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      name="location"
-                      type="text"
-                      required
-                      value={formData.location}
-                      onChange={handleInputChange}
-                      className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
-                      placeholder="e.g. Nairobi, KE"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">County</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        name="county"
+                        type="text"
+                        required
+                        value={formData.county}
+                        onChange={handleInputChange}
+                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
+                        placeholder="e.g. Nairobi"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Sub-County</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        name="subcounty"
+                        type="text"
+                        required
+                        value={formData.subcounty}
+                        onChange={handleInputChange}
+                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kenya-green/20 font-bold"
+                        placeholder="e.g. Westlands"
+                      />
+                    </div>
                   </div>
                 </div>
 

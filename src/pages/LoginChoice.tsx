@@ -30,6 +30,14 @@ export const LoginChoice = () => {
       hoverColor: 'hover:bg-red-700',
     },
     {
+      title: 'Super Admin',
+      description: 'Central command for platform oversight, school registration, and global analytics.',
+      icon: ShieldAlert,
+      path: '/super-admin',
+      color: 'bg-gray-900',
+      hoverColor: 'hover:bg-black',
+    },
+    {
       title: 'Register School',
       description: 'New school? Register your institution to start using Bora School KE today.',
       icon: Building2,
